@@ -1,0 +1,1 @@
+# Setup the initial directory, Git and Github
