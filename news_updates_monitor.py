@@ -1,1 +1,3 @@
-# Setup the initial directory, Git and Github
+import newspaper
+
+print('test')
