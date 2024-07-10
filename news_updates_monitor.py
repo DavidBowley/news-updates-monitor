@@ -27,8 +27,8 @@ for div in text_block_divs:
                 del tag['class']
         body_paragraphs += str(p)
 
-print('***Article headline***\n', headline)
-print('\n***Article body***\n', body_paragraphs)
+print('***Article headline***\n' + headline)
+print('\n***Article body***\n' + body_paragraphs)
 print('\n***Byline***')
 
 byline_block_div = soup.find('div', attrs={'data-component': 'byline-block'})
