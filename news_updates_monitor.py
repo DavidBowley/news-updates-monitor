@@ -3,6 +3,9 @@ import bs4
 
 url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
 page = requests.get(url)
+# For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes everywhere
+# Hard-coding as utf-8 shouldn't cause issues unless BBC change it for random pages which is unlikely
+page.encoding = 'utf-8'
 
 soup = bs4.BeautifulSoup(page.text, 'lxml')
 headline = soup.h1.string
@@ -23,4 +26,3 @@ for div in text_block_divs:
 
 print('***Article headline***\n', headline)
 print('\n***Article body***\n', body_paragraphs)
-
