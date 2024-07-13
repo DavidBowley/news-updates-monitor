@@ -1,5 +1,7 @@
 import requests
 import bs4
+from datetime import datetime
+
 
 url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
 # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
@@ -40,3 +42,16 @@ else:
     # It is probably possible with some work, but as the main focus of the project is comparing article headlines/body this will be left as a list of strings for now
     for string in byline_block_div.strings:
         print(string)
+
+print('\n***Date Info***')
+
+time_tag = soup.find_all('time', attrs={'data-testid': 'timestamp'})
+for tag in time_tag:
+    # At the time of writing, each visible date was inside a <time> element with a datetime attribute that conforms to ISO 8601
+    iso_datetime = tag['datetime']
+    article_datetime = datetime.fromisoformat(iso_datetime)
+    print(article_datetime)
+
+
+
+
