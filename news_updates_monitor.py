@@ -12,11 +12,32 @@ class Article():
         self.url = url
         self.raw_HTML = ''
         self.soup = None
+        # The first headline that we see (never changes)
         self.headline = ''
+        # The first body that we see (never changes)
         self.body = ''
+        # The first byline that we see (never changes)
         self.byline = []
-        self.datetime = []
-        # Plenty more to add here but will stop for now...
+        # The first article timestamps that we see (never changes)
+        # Could be multiple timestamps even on the first scrape (original and updated dates) as the article could have existed a while already
+        self.timestamp = []
+        # DEBUG: Captures every headline/body/byline/timestamp seen per article scrape *REGARDLESS* of whether it has changed
+        # [Not currently implemented]
+        self.all_future_headlines = []
+        self.all_future_bodies = []
+        self.all_future_bylines = []
+        self.all_future_timestamps = []
+        # Keeps a record of all headline/body/byline/timestamp changes seen on future article scrapes
+        # [Not currently implemented]
+        self.headline_changes = []
+        self.body_changes = []
+        self.byline_changes = []
+        self.timestamp_changes = []
+        # Records a timestamp for every fetch_HTML() call, so if the article hasn't changed we still have a record that we checked
+        self.timestamps_fetch = []
+        # Will potentially be used as a link between the Article object in persistent storage and the mapping from ID dict key -> Article object and/or URL dict key -> ID
+        # [Not currently implemented]
+        self.id = None
 
     def __str__(self):
         """ This may change for now but I need to pick something... 
@@ -24,7 +45,7 @@ class Article():
         """
         return self.headline + '\n' + self.url
 
-    def get_HTML(self):
+    def fetch_HTML(self):
         response = requests.get(self.url)
         # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes everywhere
         # Hard-coding as utf-8 shouldn't cause issues unless BBC change it for random pages which is unlikely
@@ -36,7 +57,7 @@ class Article():
         self.parse_headline()
         self.parse_body()
         self.parse_byline()
-        self.parse_datetime()
+        self.parse_timestamp()
 
     def parse_headline(self):
         self.headline = self.soup.h1.string
@@ -65,15 +86,15 @@ class Article():
             for string in byline_block_div.strings:
                 self.byline.append(string)
 
-    def parse_datetime(self):
+    def parse_timestamp(self):
         """ At the time of writing, each visible date was inside a <time> element with a datetime attribute that conforms to ISO 8601
             Although a max of 2 <time> elements have only ever been seen, for debugging purposes we will collect all of them to confirm this assumption
-            self.datetime will be a list of Datetime objects
+            self.timestamp will be a list of Datetime objects
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
         for tag in time_tag:
             iso_datetime = tag['datetime']
-            self.datetime.append(datetime.fromisoformat(iso_datetime))
+            self.timestamp.append(datetime.fromisoformat(iso_datetime))
 
 url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
 # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
@@ -81,7 +102,7 @@ url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
 # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
 
 test_article = Article(url)
-test_article.get_HTML()
+test_article.fetch_HTML()
 test_article.parse_all()
 
 print('***Article headline***\n' + test_article.headline)
@@ -92,4 +113,4 @@ for string in test_article.byline:
     print(string)
 
 print('\n***Date Info***')
-print(test_article.datetime)
+print(test_article.timestamp)
