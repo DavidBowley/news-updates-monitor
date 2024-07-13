@@ -46,11 +46,7 @@ class Article():
         return self.headline + '\n' + self.url
 
     def fetch_HTML(self):
-        response = requests.get(self.url)
-        # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes everywhere
-        # Hard-coding as utf-8 shouldn't cause issues unless BBC change it for random pages which is unlikely
-        response.encoding = 'utf-8'
-        self.raw_HTML = response.text
+        self.raw_HTML = request_HTML(self.url)
 
     def parse_all(self):
         self.soup = bs4.BeautifulSoup(self.raw_HTML, 'lxml')
@@ -96,21 +92,51 @@ class Article():
             iso_datetime = tag['datetime']
             self.timestamp.append(datetime.fromisoformat(iso_datetime))
 
-url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
-# url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
-# url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
-# url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
+def testing_Article_class():
+    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
+    # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
+    # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
+    # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
+    # BBC In-depth article
+    url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
 
-test_article = Article(url)
-test_article.fetch_HTML()
-test_article.parse_all()
+    test_article = Article(url)
+    test_article.fetch_HTML()
+    test_article.parse_all()
 
-print('***Article headline***\n' + test_article.headline)
-print('\n***Article body***\n' + test_article.body)
-print('\n***Byline***')
+    print('***Article headline***\n' + test_article.headline)
+    print('\n***Article body***\n' + test_article.body)
+    print('\n***Byline***')
 
-for string in test_article.byline:
-    print(string)
+    for string in test_article.byline:
+        print(string)
 
-print('\n***Date Info***')
-print(test_article.timestamp)
+    print('\n***Date Info***')
+    print(test_article.timestamp)
+
+def request_HTML(url):
+    response = requests.get(url)
+    # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes everywhere
+    # Hard-coding as utf-8 shouldn't cause issues unless BBC change it for random pages which is unlikely
+    response.encoding = 'utf-8'
+    return response.text
+
+def get_news_urls():
+    """ Extracts all the news article URLs from the BBC Homepage
+        Returns a list of URL strings
+    """
+    news_homepage = 'https://www.bbc.co.uk/news'
+    soup = bs4.BeautifulSoup(request_HTML(news_homepage), 'lxml')
+    news_urls = []
+    for link in soup.find_all('a'):
+        href = link.get('href')
+        if href is not None and href.find('/news/articles/') != -1:
+            news_urls.append(href)
+    # Remove duplicate URLs
+    news_urls = list(set(news_urls))
+    return news_urls
+    
+news_links = get_news_urls()
+for link in news_links:
+    print(link)
+print(len(news_links))
