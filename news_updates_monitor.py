@@ -131,7 +131,7 @@ def get_news_urls():
     for link in soup.find_all('a'):
         href = link.get('href')
         if href is not None and href.find('/news/articles/') != -1:
-            news_urls.append(href)
+            news_urls.append('https://www.bbc.co.uk' + href)
     # Remove duplicate URLs
     news_urls = list(set(news_urls))
     return news_urls
