@@ -39,6 +39,8 @@ class Article():
         # Will potentially be used as a link between the Article object in persistent storage and the mapping from ID dict key -> Article object and/or URL dict key -> ID
         # [Not currently implemented]
         self.id = None
+        # Flag for if any errors have occurred during parsing
+        self.parse_errors = False
 
     def __str__(self):
         """ This may change for now but I need to pick something... 
@@ -58,14 +60,24 @@ class Article():
 
     def parse_headline(self):
         self.headline = self.soup.h1.string
-        # Parse error handling
         if self.headline is None:
-            logger.error('Parse Error: self.soup.h1.string returned None, the Headline could not be parsed')
+            logger.error('Parse Error: the Headline could not be parsed - unable to find the H1.')
     
     def parse_body(self):
         text_block_divs = self.soup.find_all('div', attrs={'data-component': 'text-block'})
+        if len(text_block_divs) == 0:
+            logger.error('Parse Error: the article body could not be parsed - unable to find any <div data-component=\'text-block\'> elements')
+            self.body = None
+            self.parse_errors = True
+            return
         for div in text_block_divs:
-            for p in div.find_all('p'):
+            paragraphs = div.find_all('p')
+            if len(paragraphs) == 0:
+                logger.error('Parse Error: the article body could not be parsed - unable to find any <p> elements within the <div data-component=\'text-block\'> elements')
+                self.body = None
+                self.parse_errors = True
+                return
+            for p in paragraphs:
                 # Delete class attribute from each parent <p>
                 del p['class']
                 # Do the same for each descendant of each <p> that is a Tag object (e.g. <a href> and <b>)
@@ -81,6 +93,7 @@ class Article():
         byline_block_div = self.soup.find('div', attrs={'data-component': 'byline-block'})
         if byline_block_div is None:
             # There is no byline-block present (some articles don't have one)
+            # Note that this means there is no parse error logging logic used here as there's no way to differentiate between a broken parse or just no byline present on the page
             self.byline = None
         else:
             for string in byline_block_div.strings:
@@ -92,30 +105,54 @@ class Article():
             self.timestamp will be a list of Datetime objects
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
+        if len(time_tag) == 0:
+            logger.error('Parse Error: the timestamp could not be parsed - unable to find any <time data-testid=\'timestamp\'> elements')
+            self.timestamp = None
+            self.parse_errors = True
+            return
         for tag in time_tag:
             iso_datetime = tag['datetime']
             self.timestamp.append(datetime.fromisoformat(iso_datetime))
 
+    def debug_print(self):
+        """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes for debugging purposes
+        """
+        print('***Article headline***')
+        print(self.headline)
+        print('\n***Article body***')
+        print(self.body)
+        print('\n***Byline***')
+        print(self.byline)
+        print('\n***Timestamp***')
+        print(self.timestamp)
+
+
 def testing_Article_class():
-    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
+    url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
     # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
     # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
     # BBC In-depth article
-    url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
+    # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
+    # Article that should fail parsing (mostly)
+    # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
+    # Article that should fully fail parsing
+    # url = 'https://webaim.org/techniques/forms/controls'
 
     test_article = Article(url)
     test_article.fetch_HTML()
     test_article.parse_all()
+    test_article.debug_print()
 
-    print('***Article headline***')
-    print(test_article.headline)
-    print('\n***Article body***')
-    print(test_article.body)
-    print('\n***Byline***')
-    print(test_article.byline)
-    print('\n***Date Info***')
-    print(test_article.timestamp)
+def debug_file_to_article_object(filename):
+    """ Debugging function: turn an offline file into an article object for testing purposes instead of fetching a live URL
+        Pulls the HTML into the self.rawHTML attribute
+        URL is not used and set to 'DEBUG'
+    """
+    debug_article = Article('DEBUG')
+    with open(filename, encoding='utf-8') as my_file:
+        debug_article.raw_HTML = my_file.read()
+    return debug_article
 
 def request_HTML(url):
     response = requests.get(url)
@@ -161,11 +198,6 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-# Test...
-logger.debug('This is a debug message')
-logger.info('This is an info message')
-logger.warning('This is a warning message')
-logger.error('This is an error message')
 
+testing_Article_class()
 
-# testing_Article_class()
