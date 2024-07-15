@@ -61,19 +61,19 @@ class Article():
     def parse_headline(self):
         self.headline = self.soup.h1.string
         if self.headline is None:
-            logger.error('Parse Error: the Headline could not be parsed - unable to find the H1.')
+            logger.error('Parse Error: URL: %s --> Headline', self.url)
     
     def parse_body(self):
         text_block_divs = self.soup.find_all('div', attrs={'data-component': 'text-block'})
         if len(text_block_divs) == 0:
-            logger.error('Parse Error: the article body could not be parsed - unable to find any <div data-component=\'text-block\'> elements')
+            logger.error('Parse Error: URL: %s --> Body --> <div data-component=\'text-block\'>', self.url)
             self.body = None
             self.parse_errors = True
             return
         for div in text_block_divs:
             paragraphs = div.find_all('p')
             if len(paragraphs) == 0:
-                logger.error('Parse Error: the article body could not be parsed - unable to find any <p> elements within the <div data-component=\'text-block\'> elements')
+                logger.error('Parse Error: URL: %s --> Body --> <div data-component=\'text-block\'> --> <p>', self.url)
                 self.body = None
                 self.parse_errors = True
                 return
@@ -106,7 +106,7 @@ class Article():
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
         if len(time_tag) == 0:
-            logger.error('Parse Error: the timestamp could not be parsed - unable to find any <time data-testid=\'timestamp\'> elements')
+            logger.error('Parse Error: URL: %s --> Timestamp --> <time data-testid=\'timestamp\'>', self.url)
             self.timestamp = None
             self.parse_errors = True
             return
@@ -128,7 +128,7 @@ class Article():
 
 
 def testing_Article_class():
-    url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
+    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
     # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
     # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
@@ -137,7 +137,7 @@ def testing_Article_class():
     # Article that should fail parsing (mostly)
     # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
     # Article that should fully fail parsing
-    # url = 'https://webaim.org/techniques/forms/controls'
+    url = 'https://webaim.org/techniques/forms/controls'
 
     test_article = Article(url)
     test_article.fetch_HTML()
