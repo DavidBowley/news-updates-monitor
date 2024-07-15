@@ -3,6 +3,10 @@ import bs4
 from datetime import datetime
 import logging
 
+# Note: currently using my forked version which removes the extra log handler added: pip install git+https://github.com/DavidBowley/requests-throttler.git@remove_log_handlers
+# The original PyPI can be used but there will be doubled log entries and reduced formatting ability
+from requests_throttler import BaseThrottler
+
 class Article():
     """ An Article object represents one individual BBC News article
         It can be used to scrape and parse a news article given any valid BBC news URL
@@ -175,10 +179,24 @@ def get_news_urls():
     # Remove duplicate URLs
     news_urls = list(set(news_urls))
     return news_urls
+
+def testing_requests_throttler():
+    with BaseThrottler(name='base-throttler', delay=5) as bt:
+        request = requests.Request(method='GET', url='http://www.google.com')
+        reqs = [request for i in range(0, 2)]
+        throttled_requests = bt.multi_submit(reqs)
+
+    responses = [tr.response for tr in throttled_requests]
+
+    for response in responses:
+        response.encoding = 'utf-8'
+        print(response.text[0:100])
+
+    print(len(responses))
     
 
 # Create a logger
-logger = logging.getLogger('__name__')
+logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 # Create a formatter to define the log format
@@ -198,6 +216,10 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+# testing_Article_class()
 
-testing_Article_class()
+# logger.debug('testing 123')
+
+testing_requests_throttler()
+
 
