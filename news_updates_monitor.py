@@ -140,7 +140,7 @@ class Article():
         print(self.timestamp)
 
     def debug_log_print(self):
-        """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes for debugging purposes
+        """ Calls logger.debug to output: URL, Parse Errors (Boolean), Headline, Body, Byline, Timestamp
         """
         logger.debug('\n***URL***\n' + str(self.url) + '\n\n***Parse Errors***\n' + str(self.parse_errors) + 
                      '\n\n***Headline***\n' + str(self.headline) + '\n\n***Body***\n' + str(self.body) + 
@@ -201,11 +201,8 @@ def urls_to_parsed_articles(urls, delay):
         with raw_HTML attribute value fetched via the requests_throttler
         The returned objects should be ready to parse via self.parse_all()
         urls = list of strings
-        delay = integer in seconds to use for requests throttling
+        delay = float; seconds to use for requests throttling
     """
-    # Assuming get_news_urls() has just been called, there has already been a request within the last few milliseconds
-    # It's possible the first request of the throttler will be sent too close to the homepage scrape request - so we delay to avoid this
-    time.sleep(delay)
     # List of request objects to send to the throttler
     reqs = []
     for url in urls:
@@ -229,9 +226,12 @@ def urls_to_parsed_articles(urls, delay):
     return res
 
 def testing_get_latest_news():
-    urls = get_news_urls()
-    # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
-    articles = urls_to_parsed_articles(urls, delay=5)
+    # urls = get_news_urls()
+    urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
+    # As get_news_urls() has just been called, there has already been a HTTP request within the last few milliseconds
+    # It's possible the first request of the throttler will be sent too close to the homepage scrape request - so we delay to avoid this
+    time.sleep(5)
+    articles = urls_to_parsed_articles(urls, delay=2)
     for article in articles:
         article.debug_log_print()
         
