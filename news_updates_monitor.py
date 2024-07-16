@@ -2,9 +2,12 @@ import requests
 import bs4
 from datetime import datetime
 import logging
+import time
 
-# Note: currently using my forked version which removes the extra log handler added: pip install git+https://github.com/DavidBowley/requests-throttler.git@remove_log_handlers
+# Note: currently using my forked version of requests_throttler which removes the extra log handler added 
 # The original PyPI can be used but there will be doubled log entries and reduced formatting ability
+# PR submitted: https://github.com/se7entyse7en/requests-throttler/pull/19 but my fork can be used until it's fixed:
+# pip install git+https://github.com/DavidBowley/requests-throttler.git@remove_log_handlers
 from requests_throttler import BaseThrottler
 
 class Article():
@@ -50,9 +53,12 @@ class Article():
         """ This may change for now but I need to pick something... 
             Going for both URL and headline for now
         """
-        return self.headline + '\n' + self.url
+        return str(self.headline) + '\n' + str(self.url)
 
     def fetch_HTML(self):
+        """ While currently used in some testing functions, it's likely this method won't actually be used in the final version
+            All news article HTTP requests will be bulk-routed through requests_throttler
+        """
         self.raw_HTML = request_HTML(self.url)
 
     def parse_all(self):
@@ -66,6 +72,7 @@ class Article():
         self.headline = self.soup.h1.string
         if self.headline is None:
             logger.error('Parse Error: URL: %s --> Headline', self.url)
+            self.parse_errors = True
     
     def parse_body(self):
         text_block_divs = self.soup.find_all('div', attrs={'data-component': 'text-block'})
@@ -121,14 +128,23 @@ class Article():
     def debug_print(self):
         """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes for debugging purposes
         """
-        print('***Article headline***')
+        print('\n***URL***')
+        print(self.url)
+        print('\n***Headline***')
         print(self.headline)
-        print('\n***Article body***')
+        print('\n***Body***')
         print(self.body)
         print('\n***Byline***')
         print(self.byline)
         print('\n***Timestamp***')
         print(self.timestamp)
+
+    def debug_log_print(self):
+        """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes for debugging purposes
+        """
+        logger.debug('\n***URL***\n' + str(self.url) + '\n\n***Parse Errors***\n' + str(self.parse_errors) + 
+                     '\n\n***Headline***\n' + str(self.headline) + '\n\n***Body***\n' + str(self.body) + 
+                     '\n\n***Byline***\n' + str(self.byline) + '\n\n***Timestamp***\n' + str(self.timestamp) + '\n\n')
 
 
 def testing_Article_class():
@@ -137,16 +153,16 @@ def testing_Article_class():
     # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
     # BBC In-depth article
-    # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
+    url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
     # Article that should fail parsing (mostly)
     # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
     # Article that should fully fail parsing
-    url = 'https://webaim.org/techniques/forms/controls'
+    # url = 'https://webaim.org/techniques/forms/controls'
 
     test_article = Article(url)
     test_article.fetch_HTML()
     test_article.parse_all()
-    test_article.debug_print()
+    test_article.debug_log_print()
 
 def debug_file_to_article_object(filename):
     """ Debugging function: turn an offline file into an article object for testing purposes instead of fetching a live URL
@@ -180,20 +196,45 @@ def get_news_urls():
     news_urls = list(set(news_urls))
     return news_urls
 
-def testing_requests_throttler():
-    with BaseThrottler(name='base-throttler', delay=5) as bt:
-        request = requests.Request(method='GET', url='http://www.google.com')
-        reqs = [request for i in range(0, 2)]
-        throttled_requests = bt.multi_submit(reqs)
+def urls_to_parsed_articles(urls, delay):
+    """ Takes a list of URLs and returns a list of Article objects
+        with raw_HTML attribute value fetched via the requests_throttler
+        The returned objects should be ready to parse via self.parse_all()
+        urls = list of strings
+        delay = integer in seconds to use for requests throttling
+    """
+    # Assuming get_news_urls() has just been called, there has already been a request within the last few milliseconds
+    # It's possible the first request of the throttler will be sent too close to the homepage scrape request - so we delay to avoid this
+    time.sleep(delay)
+    # List of request objects to send to the throttler
+    reqs = []
+    for url in urls:
+        request = requests.Request(method='GET', url=url)
+        reqs.append(request)
 
+    # Throttler queues all the requests and processes them slowly
+    # This step can take a while depending on the delay and number of URLs
+    with BaseThrottler(name='base-throttler', delay=delay) as bt:
+        throttled_requests = bt.multi_submit(reqs)
     responses = [tr.response for tr in throttled_requests]
 
+    res = []
     for response in responses:
         response.encoding = 'utf-8'
-        print(response.text[0:100])
+        article = Article(response.url)
+        article.raw_HTML = response.text
+        article.parse_all()
+        res.append(article)
 
-    print(len(responses))
-    
+    return res
+
+def testing_get_latest_news():
+    urls = get_news_urls()
+    # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
+    articles = urls_to_parsed_articles(urls, delay=5)
+    for article in articles:
+        article.debug_log_print()
+        
 
 # Create a logger
 logger = logging.getLogger()
@@ -203,7 +244,7 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
 
 # Create a file handler to write logs to a file
-file_handler = logging.FileHandler('debug.log')
+file_handler = logging.FileHandler('debug.log', encoding='utf-8')
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(formatter)
 
@@ -216,10 +257,6 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+
+testing_get_latest_news()
 # testing_Article_class()
-
-# logger.debug('testing 123')
-
-testing_requests_throttler()
-
-
