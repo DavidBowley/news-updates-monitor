@@ -248,27 +248,28 @@ def testing_anchor_links():
         logger.debug(url)
         
 
-# Create a logger
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+if __name__ == '__main__':
 
-# Create a formatter to define the log format
-formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    # Create a logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
 
-# Create a file handler to write logs to a file
-file_handler = logging.FileHandler('debug.log', encoding='utf-8')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(formatter)
+    # Create a formatter to define the log format
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
 
-# Create a stream handler to print logs to the console
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
+    # Create a file handler to write logs to a file
+    file_handler = logging.FileHandler('debug.log', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
 
-# Add the handlers to the logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+    # Create a stream handler to print logs to the console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(formatter)
 
+    # Add the handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
-# testing_get_latest_news()
-testing_anchor_links()
+    # testing_get_latest_news()
+    testing_anchor_links()
