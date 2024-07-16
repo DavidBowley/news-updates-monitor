@@ -236,17 +236,60 @@ def testing_get_latest_news():
     for article in articles:
         article.debug_log_print()
 
-def testing_anchor_links():
-    """ Trying to see if I can find those "[url]#comments" links, which appeared to be duplicates last time
-        Work out how to remove them from the list of URLs
-    """
-    urls = get_news_urls()
-    # sort for debug purposes
-    urls.sort()
 
-    for url in urls:
-        logger.debug(url)
-        
+# Playing around with this debug table but I think it could possibly work as a Class as all these functions will modify the table
+# Long-term it might be better as its own package and imported because I can see having the ability to build out debug tables with
+# whatever data I want could be quite useful
+
+# Currently pulls from template files in /debug_table/ (which is not part of the Git repo) but only using it for debugging so far
+
+def debug_table():
+    """ Builds a data table inside a HTML file with all the information from the article objects we want to see
+        [work in progress]
+    """
+    with open('debug_table/top.html', encoding='utf-8') as f:
+        template_start = f.read()
+    with open('debug_table/bottom.html', encoding='utf-8') as f:
+        template_end = f.read()
+
+    # Construct data table
+    data_table = debug_table_construct(start_indent=4, caption='Caption goes here')
+
+    with open('debug_table/debug_table.html', 'w', encoding='utf-8') as f:
+        f.write(template_start)
+        f.write('\n\n' + data_table + '\n\n')
+        f.write(template_end)
+
+def debug_table_construct(start_indent, caption):
+    data_table = ''
+    ex_column_headers = ['First column header', 'Second column header', 'Third column header', 'Fourth column header', 'Fifth column header']
+    ex_table_cells = ['Test' for i in range(5)]
+    # Begin <table> and add <caption>
+    data_table += indent(start_indent) + '<table>\n' + indent(start_indent + 2) + '<caption>' + caption + '</caption>\n'
+    # Add first <tr> with table column headers
+    data_table += indent(start_indent+2) + '<tr>\n'
+    for th in  ex_column_headers:
+        data_table += indent(start_indent+4) + '<th>' + th + '</th>\n'
+    data_table += indent(start_indent+2) + '</tr>\n'
+    # Row 2
+    data_table += indent(start_indent+2) + '<tr>\n'
+    for td in  ex_table_cells:
+        data_table += indent(start_indent+4) + '<td>' + td + '</td>\n'
+    data_table += indent(start_indent+2) + '</tr>\n'
+    # Row 3
+    data_table += indent(start_indent+2) + '<tr>\n'
+    for td in  ex_table_cells:
+        data_table += indent(start_indent+4) + '<td>' + td + '</td>\n'
+    data_table += indent(start_indent+2) + '</tr>\n'
+    # End table
+    data_table += indent(start_indent) + '</table>'
+    return data_table
+
+def indent(spaces):
+    """ Returns a string matching the number of spaces needed for the indent
+        spaces = integer
+    """ 
+    return ' ' * spaces
 
 if __name__ == '__main__':
 
@@ -272,4 +315,5 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
     # testing_get_latest_news()
-    testing_anchor_links()
+    # testing_anchor_links()
+    debug_table()

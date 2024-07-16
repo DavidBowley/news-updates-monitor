@@ -163,3 +163,5 @@ cython_debug/
 
 # debugging
 test_file.html
+debug_table.html
+debug_table/
