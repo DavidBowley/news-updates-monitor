@@ -190,14 +190,15 @@ def get_news_urls():
     news_urls = []
     for link in soup.find_all('a'):
         href = link.get('href')
-        if href is not None and href.find('/news/articles/') != -1:
+        # href attribute exists on the <a> AND contains '/news/articles/' AND is not the '#comments' version of the link
+        if href is not None and href.find('/news/articles/') != -1 and href.find('comments') == -1:
             news_urls.append('https://www.bbc.co.uk' + href)
     # Remove duplicate URLs
     news_urls = list(set(news_urls))
     return news_urls
 
 def urls_to_parsed_articles(urls, delay):
-    """ Takes a list of URLs and returns a list of Article objects
+    """ Takes a list of URLs and returns a list of Article objects 
         with raw_HTML attribute value fetched via the requests_throttler
         The returned objects should be ready to parse via self.parse_all()
         urls = list of strings
@@ -234,6 +235,17 @@ def testing_get_latest_news():
     articles = urls_to_parsed_articles(urls, delay=2)
     for article in articles:
         article.debug_log_print()
+
+def testing_anchor_links():
+    """ Trying to see if I can find those "[url]#comments" links, which appeared to be duplicates last time
+        Work out how to remove them from the list of URLs
+    """
+    urls = get_news_urls()
+    # sort for debug purposes
+    urls.sort()
+
+    for url in urls:
+        logger.debug(url)
         
 
 # Create a logger
@@ -258,5 +270,5 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 
-testing_get_latest_news()
-# testing_Article_class()
+# testing_get_latest_news()
+testing_anchor_links()
