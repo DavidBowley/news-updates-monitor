@@ -163,5 +163,9 @@ cython_debug/
 
 # debugging
 test_file.html
+test_file2.html
 debug_table.html
 debug_table/
+
+# diff output
+ansi2html.html

@@ -169,7 +169,7 @@ def debug_file_to_article_object(filename):
         Pulls the HTML into the self.rawHTML attribute
         URL is not used and set to 'DEBUG'
     """
-    debug_article = Article('DEBUG')
+    debug_article = Article('DEBUG: no URL as created from offline file')
     with open(filename, encoding='utf-8') as my_file:
         debug_article.raw_HTML = my_file.read()
     return debug_article
@@ -253,6 +253,9 @@ def debug_table():
         template_end = f.read()
 
     # Construct data table
+    # Note: in final version this won't be stored in a variable as that would store entire article database here
+    # We'll be taking one article object at a time and writing it to the data table in the HTML file
+    # so there's only ever one article object in memory during this process at any one time
     data_table = debug_table_construct(start_indent=4, caption='Caption goes here')
 
     with open('debug_table/debug_table.html', 'w', encoding='utf-8') as f:
@@ -261,25 +264,48 @@ def debug_table():
         f.write(template_end)
 
 def debug_table_construct(start_indent, caption):
+    # Notes for taking from prototype to working function (note this function might be merged with its caller also)
+    # 
+    # 1. Outer for loop iterates through article objects in persistent storage
+    # 2. Inner for loop iterates through debug_attrs to add the table cells for each row
+    # 3. Number of columns to add is determined by the length of debug_attrs and the other for loops in use
+    #    This allows a customised data table from 1 column up to as many attributes as the object has
+    # 4. So that the entire database isn't loaded into memory...
+    #    ... syncronise pulling the article object from persistent storage with the actual writing into the HTML file
+    #        e.g. for every article pulled (one at a time) the HTML file is written to (appended) with the next data table row
+    #        so there's never more than one article's worth of data loaded into memory at a time while writing the table
+
+    # Note: I know this makes no sense to place it here and likely this function needs to be rewritten - but this is just to test the principle
+    article = debug_file_to_article_object('test_file.html')
+    article2 = debug_file_to_article_object('test_file2.html')
+    article.parse_all()
+    article2.parse_all()
+    # In the proper version we'll be traversing through a list of articles, but for now just setting two separate dictionaries and hard-coding table data
+    article_dict = article.__dict__
+    article_dict2 = article2.__dict__
+    
+    # Simulate list of attributes I want to show in debug table
+    debug_attrs = ['headline', 'body', 'byline', 'timestamp']
+
     data_table = ''
-    ex_column_headers = ['First column header', 'Second column header', 'Third column header', 'Fourth column header', 'Fifth column header']
-    ex_table_cells = ['Test' for i in range(5)]
+    # ex_column_headers = ['First column header', 'Second column header', 'Third column header', 'Fourth column header', 'Fifth column header']
+    # ex_table_cells = ['Test' for i in range(5)]
     # Begin <table> and add <caption>
     data_table += indent(start_indent) + '<table>\n' + indent(start_indent + 2) + '<caption>' + caption + '</caption>\n'
     # Add first <tr> with table column headers
     data_table += indent(start_indent+2) + '<tr>\n'
-    for th in  ex_column_headers:
+    for th in  debug_attrs:
         data_table += indent(start_indent+4) + '<th>' + th + '</th>\n'
     data_table += indent(start_indent+2) + '</tr>\n'
     # Row 2
     data_table += indent(start_indent+2) + '<tr>\n'
-    for td in  ex_table_cells:
-        data_table += indent(start_indent+4) + '<td>' + td + '</td>\n'
+    for attr in  debug_attrs:
+        data_table += indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
     data_table += indent(start_indent+2) + '</tr>\n'
     # Row 3
     data_table += indent(start_indent+2) + '<tr>\n'
-    for td in  ex_table_cells:
-        data_table += indent(start_indent+4) + '<td>' + td + '</td>\n'
+    for attr in  debug_attrs:
+        data_table += indent(start_indent+4) + '<td>' + str(article_dict2[attr]) + '</td>\n'
     data_table += indent(start_indent+2) + '</tr>\n'
     # End table
     data_table += indent(start_indent) + '</table>'
@@ -290,6 +316,7 @@ def indent(spaces):
         spaces = integer
     """ 
     return ' ' * spaces
+
 
 if __name__ == '__main__':
 
@@ -317,3 +344,5 @@ if __name__ == '__main__':
     # testing_get_latest_news()
     # testing_anchor_links()
     debug_table()
+    # testing_access_filtered_obj_attrs()
+
