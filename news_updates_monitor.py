@@ -95,7 +95,10 @@ class Article():
                 for tag in p.descendants:
                     if isinstance(tag, bs4.element.Tag):
                         del tag['class']
-                self.body += str(p)
+                # Each paragraph must be on a new line for future diff functions to work
+                self.body += str(p) + '\n'
+        # The final <p> has a pointless '\n' so we strip this out
+        self.body = self.body.rstrip()
 
     def parse_byline(self):
         """ The data is too inconsistent to create a reliable mapping (e.g. Author, Job Title, etc.) as different authors don't all have the same types of data
@@ -148,12 +151,12 @@ class Article():
 
 
 def testing_Article_class():
-    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
+    url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
     # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
     # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
     # BBC In-depth article
-    url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
+    # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo' 
     # Article that should fail parsing (mostly)
     # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
     # Article that should fully fail parsing
@@ -343,6 +346,6 @@ if __name__ == '__main__':
 
     # testing_get_latest_news()
     # testing_anchor_links()
-    debug_table()
+    # debug_table()
     # testing_access_filtered_obj_attrs()
-
+    testing_Article_class()
