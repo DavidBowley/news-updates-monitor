@@ -3,6 +3,7 @@ import bs4
 from datetime import datetime
 import logging
 import time
+import shelve
 
 # Note: currently using my forked version of requests_throttler which removes the extra log handler added 
 # The original PyPI can be used but there will be doubled log entries and reduced formatting ability
@@ -69,7 +70,7 @@ class Article():
         self.parse_timestamp()
 
     def parse_headline(self):
-        self.headline = self.soup.h1.string
+        self.headline = str(self.soup.h1.string)
         if self.headline is None:
             logger.error('Parse Error: URL: %s --> Headline', self.url)
             self.parse_errors = True
@@ -111,7 +112,7 @@ class Article():
             self.byline = None
         else:
             for string in byline_block_div.strings:
-                self.byline.append(string)
+                self.byline.append(str(string))
 
     def parse_timestamp(self):
         """ At the time of writing, each visible date was inside a <time> element with a datetime attribute that conforms to ISO 8601
@@ -148,6 +149,44 @@ class Article():
         logger.debug('\n***URL***\n' + str(self.url) + '\n\n***Parse Errors***\n' + str(self.parse_errors) + 
                      '\n\n***Headline***\n' + str(self.headline) + '\n\n***Body***\n' + str(self.body) + 
                      '\n\n***Byline***\n' + str(self.byline) + '\n\n***Timestamp***\n' + str(self.timestamp) + '\n\n')
+
+    def store(self):
+        """ Stores the Article object in persistent storage
+            WORK IN PROGRESS 
+            TO DO:  - Likely need to remove the soup from the article before shelving - working ok for me at the moment but lots of reports online of issues
+                    and I don't really need to keep it - it can be re-souped from the raw_HTML for debugging purposes later on if needed
+                     - Need to assign the ID to the article object before it gets shelved too
+        """
+        # First we need to work out what the latest ID is, so we can assign the right ID to the Article and use it as the db key
+        with shelve.open('articles_db') as db:
+            # As we'll start at ID 1, if it doesn't exist then this is a new database
+            if '1' not in db:
+                logger.info('Added article object to ID 1 (database was empty)')
+                db['1'] = self
+            else:
+                # Find the biggest ID used in the DB so far and prep the next key/ID up
+                keys = list(db.keys())
+                keys.sort(key=int)
+                last_id = keys[-1]
+                next_id = str(int(last_id) + 1)
+                db[next_id] = self
+                logger.info('Added article object to ID %s', next_id)
+
+
+    def store_test(self):
+        """ Trying to resolve issue with simply shelving one article 
+        """
+        with shelve.open('articles_db') as db:
+            self.soup = None
+
+            # logger.debug(self.__dict__)
+            # DEBUG: add each attribute of the Article object to its own key and see what happens...
+            attr_dict = self.__dict__            
+
+            for attr in attr_dict:
+                print(attr)
+                db[attr] = attr_dict[attr]
+            # db['1'] = self
 
 
 def testing_Article_class():
@@ -229,16 +268,30 @@ def urls_to_parsed_articles(urls, delay):
 
     return res
 
-def testing_get_latest_news():
+def get_latest_news():
     # urls = get_news_urls()
     urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
+    # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo']
     # As get_news_urls() has just been called, there has already been a HTTP request within the last few milliseconds
     # It's possible the first request of the throttler will be sent too close to the homepage scrape request - so we delay to avoid this
-    time.sleep(5)
+    time.sleep(2)
     articles = urls_to_parsed_articles(urls, delay=2)
+    return articles
+
+def testing_print_latest_news():
+    articles = get_latest_news()
     for article in articles:
         article.debug_log_print()
 
+def testing_store_articles():
+    articles = get_latest_news()
+    for article in articles:
+        article.store()
+    """
+    article = debug_file_to_article_object('test_file.html')
+    article.parse_all()
+    article.store_test()
+    """
 
 # Playing around with this debug table but I think it could possibly work as a Class as all these functions will modify the table
 # Long-term it might be better as its own package and imported because I can see having the ability to build out debug tables with
@@ -314,11 +367,34 @@ def debug_table_construct(start_indent, caption):
     data_table += indent(start_indent) + '</table>'
     return data_table
 
+def testing_shelves():
+    with shelve.open('testing_db') as db:
+        # db['testing'] = 'This is a test'
+        temp = db['testing']
+        print(temp)
+
+
+
 def indent(spaces):
     """ Returns a string matching the number of spaces needed for the indent
         spaces = integer
     """ 
     return ' ' * spaces
+
+
+
+def testing_build_dummy_db():
+    with shelve.open('articles_db') as db:
+        for i in range(10, 0, -1):
+            db[str(i)] = None
+
+def testing_print_db():
+    with shelve.open('articles_db') as db:
+        keys = list(db.keys())
+        keys.sort(key=int)
+        for key in keys:
+            print(key, db[key])
+
 
 
 if __name__ == '__main__':
@@ -348,4 +424,15 @@ if __name__ == '__main__':
     # testing_anchor_links()
     # debug_table()
     # testing_access_filtered_obj_attrs()
-    testing_Article_class()
+    # testing_Article_class()
+    # testing_print_latest_news()
+    
+
+    
+
+    # testing_build_dummy_db()
+    
+    testing_print_db()
+
+
+    # testing_store_articles()
