@@ -223,9 +223,10 @@ def request_HTML(url):
     response.encoding = 'utf-8'
     return response.text
 
-def get_news_urls():
+def get_news_urls(debug=None):
     """ Extracts all the news article URLs from the BBC Homepage
         Returns a list of URL strings
+        debug = integer; flag to reduce the number returned for testing purposes
     """
     news_homepage = 'https://www.bbc.co.uk/news'
     soup = bs4.BeautifulSoup(request_HTML(news_homepage), 'lxml')
@@ -237,7 +238,10 @@ def get_news_urls():
             news_urls.append('https://www.bbc.co.uk' + href)
     # Remove duplicate URLs
     news_urls = list(set(news_urls))
-    return news_urls
+    if debug is None:
+        return news_urls
+    else:
+        return news_urls[:debug]
 
 def urls_to_parsed_articles(urls, delay):
     """ Takes a list of URLs and returns a list of Article objects 
@@ -269,8 +273,8 @@ def urls_to_parsed_articles(urls, delay):
     return res
 
 def get_latest_news():
-    # urls = get_news_urls()
-    urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
+    urls = get_news_urls(debug=5)
+    # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo', 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo']
     # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo']
     # As get_news_urls() has just been called, there has already been a HTTP request within the last few milliseconds
     # It's possible the first request of the throttler will be sent too close to the homepage scrape request - so we delay to avoid this
@@ -293,87 +297,47 @@ def testing_store_articles():
     article.store_test()
     """
 
-# Playing around with this debug table but I think it could possibly work as a Class as all these functions will modify the table
-# Long-term it might be better as its own package and imported because I can see having the ability to build out debug tables with
-# whatever data I want could be quite useful
 
-# Currently pulls from template files in /debug_table/ (which is not part of the Git repo) but only using it for debugging so far
-
-def debug_table():
+def debug_table(debug_attrs):
     """ Builds a data table inside a HTML file with all the information from the article objects we want to see
-        [work in progress]
+        Currently pulls from template files in /debug_table/ (which is not part of the Git repo) but only using it for debugging so far
+        debug_attrs = list of strings; must only include known Article object attributes
     """
     with open('debug_table/top.html', encoding='utf-8') as f:
         template_start = f.read()
     with open('debug_table/bottom.html', encoding='utf-8') as f:
         template_end = f.read()
-
-    # Construct data table
-    # Note: in final version this won't be stored in a variable as that would store entire article database here
-    # We'll be taking one article object at a time and writing it to the data table in the HTML file
-    # so there's only ever one article object in memory during this process at any one time
-    data_table = debug_table_construct(start_indent=4, caption='Caption goes here')
-
+    data_table_start = ''
+    start_indent = 4
+    data_table_start += indent(start_indent) + '<table>\n' + indent(start_indent + 2) + '<caption>' + 'Debug Table' + '</caption>\n'
+    data_table_start += indent(start_indent+2) + '<tr>\n'
+    for th in debug_attrs:
+        data_table_start += indent(start_indent+4) + '<th>' + th + '</th>\n'
+    data_table_start += indent(start_indent+2) + '</tr>'
+    # Overwrite existing HTML file if it exists
     with open('debug_table/debug_table.html', 'w', encoding='utf-8') as f:
         f.write(template_start)
-        f.write('\n\n' + data_table + '\n\n')
-        f.write(template_end)
-
-def debug_table_construct(start_indent, caption):
-    # Notes for taking from prototype to working function (note this function might be merged with its caller also)
-    # 
-    # 1. Outer for loop iterates through article objects in persistent storage
-    # 2. Inner for loop iterates through debug_attrs to add the table cells for each row
-    # 3. Number of columns to add is determined by the length of debug_attrs and the other for loops in use
-    #    This allows a customised data table from 1 column up to as many attributes as the object has
-    # 4. So that the entire database isn't loaded into memory...
-    #    ... syncronise pulling the article object from persistent storage with the actual writing into the HTML file
-    #        e.g. for every article pulled (one at a time) the HTML file is written to (appended) with the next data table row
-    #        so there's never more than one article's worth of data loaded into memory at a time while writing the table
-
-    # Note: I know this makes no sense to place it here and likely this function needs to be rewritten - but this is just to test the principle
-    article = debug_file_to_article_object('test_file.html')
-    article2 = debug_file_to_article_object('test_file2.html')
-    article.parse_all()
-    article2.parse_all()
-    # In the proper version we'll be traversing through a list of articles, but for now just setting two separate dictionaries and hard-coding table data
-    article_dict = article.__dict__
-    article_dict2 = article2.__dict__
-    
-    # Simulate list of attributes I want to show in debug table
-    debug_attrs = ['headline', 'body', 'byline', 'timestamp']
-
-    data_table = ''
-    # ex_column_headers = ['First column header', 'Second column header', 'Third column header', 'Fourth column header', 'Fifth column header']
-    # ex_table_cells = ['Test' for i in range(5)]
-    # Begin <table> and add <caption>
-    data_table += indent(start_indent) + '<table>\n' + indent(start_indent + 2) + '<caption>' + caption + '</caption>\n'
-    # Add first <tr> with table column headers
-    data_table += indent(start_indent+2) + '<tr>\n'
-    for th in  debug_attrs:
-        data_table += indent(start_indent+4) + '<th>' + th + '</th>\n'
-    data_table += indent(start_indent+2) + '</tr>\n'
-    # Row 2
-    data_table += indent(start_indent+2) + '<tr>\n'
-    for attr in  debug_attrs:
-        data_table += indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
-    data_table += indent(start_indent+2) + '</tr>\n'
-    # Row 3
-    data_table += indent(start_indent+2) + '<tr>\n'
-    for attr in  debug_attrs:
-        data_table += indent(start_indent+4) + '<td>' + str(article_dict2[attr]) + '</td>\n'
-    data_table += indent(start_indent+2) + '</tr>\n'
-    # End table
-    data_table += indent(start_indent) + '</table>'
-    return data_table
-
-def testing_shelves():
-    with shelve.open('testing_db') as db:
-        # db['testing'] = 'This is a test'
-        temp = db['testing']
-        print(temp)
-
-
+        f.write('\n\n' + data_table_start + '\n\n')
+    # Start outputing the data rows
+    with shelve.open('articles_db') as db:
+        ids = list(db.keys())
+        ids.sort(key=int)
+        for _id in ids:
+            article = db[_id]
+            article_dict = article.__dict__
+            data_row = ''
+            data_row += indent(start_indent+2) + '<tr>\n'
+            for attr in  debug_attrs:
+                data_row += indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
+            data_row += indent(start_indent+2) + '</tr>'
+            # Append to existing HTML file
+            with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
+                f.write(data_row + '\n\n')
+        data_table_end = indent(start_indent) + '</table>'
+        # End the table and finalise file template - append to existing HTML file
+        with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
+                f.write(data_table_end + '\n\n')
+                f.write(template_end)
 
 def indent(spaces):
     """ Returns a string matching the number of spaces needed for the indent
@@ -382,6 +346,12 @@ def indent(spaces):
     return ' ' * spaces
 
 
+
+def testing_shelves():
+    with shelve.open('testing_db') as db:
+        # db['testing'] = 'This is a test'
+        temp = db['testing']
+        print(temp)
 
 def testing_build_dummy_db():
     with shelve.open('articles_db') as db:
@@ -422,17 +392,13 @@ if __name__ == '__main__':
 
     # testing_get_latest_news()
     # testing_anchor_links()
-    # debug_table()
     # testing_access_filtered_obj_attrs()
     # testing_Article_class()
     # testing_print_latest_news()
-    
-
-    
 
     # testing_build_dummy_db()
-    
-    testing_print_db()
-
-
     # testing_store_articles()
+
+    debug_table(debug_attrs = ['id', 'url', 'headline', 'parse_errors'])
+
+    # testing_print_db()
