@@ -154,25 +154,22 @@ class Article():
 
     def store(self):
         """ Stores the Article object in persistent storage
-            WORK IN PROGRESS 
-            TO DO:  - Likely need to remove the soup from the article before shelving - working ok for me at the moment but lots of reports online of issues
-                    and I don't really need to keep it - it can be re-souped from the raw_HTML for debugging purposes later on if needed
-                     - Need to assign the ID to the article object before it gets shelved too
+            Only used to store _new_ articles at the moment
         """
-        # First we need to work out what the latest ID is, so we can assign the right ID to the Article and use it as the db key
+        # Remvoing the soup before pickling as it can lead to maximum recursion depth errors - can be re-souped from raw_HTML if needed
+        self.soup = None
         with shelve.open('articles_db') as db:
             # As we'll start at ID 1, if it doesn't exist then this is a new database
             if '1' not in db:
-                logger.info('Added article object to ID 1 (database was empty)')
-                db['1'] = self
+                self.id = 1
+            # Otherwise find the next ID available
             else:
-                # Find the biggest ID used in the DB so far and prep the next key/ID up
                 keys = list(db.keys())
                 keys.sort(key=int)
-                last_id = keys[-1]
-                next_id = str(int(last_id) + 1)
-                db[next_id] = self
-                logger.info('Added article object to ID %s', next_id)
+                last_id = int(keys[-1])
+                self.id = last_id + 1    
+            db[str(self.id)] = self
+            logger.info('Added article object to ID %s', self.id)
 
 
     def store_test(self):
@@ -402,6 +399,6 @@ if __name__ == '__main__':
     
     # testing_store_articles()
 
-    debug_table(debug_attrs = ['id', 'url', 'headline', 'parse_errors'])
+    debug_table(debug_attrs = ['id', 'url', 'headline', 'parse_errors', 'soup'])
 
     
