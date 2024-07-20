@@ -70,10 +70,12 @@ class Article():
         self.parse_timestamp()
 
     def parse_headline(self):
-        self.headline = str(self.soup.h1.string)
+        self.headline = self.soup.h1.string
         if self.headline is None:
             logger.error('Parse Error: URL: %s --> Headline', self.url)
             self.parse_errors = True
+        else:
+            self.headline = str(self.headline)
     
     def parse_body(self):
         text_block_divs = self.soup.find_all('div', attrs={'data-component': 'text-block'})
@@ -395,10 +397,11 @@ if __name__ == '__main__':
     # testing_access_filtered_obj_attrs()
     # testing_Article_class()
     # testing_print_latest_news()
-
+    # testing_print_db()
     # testing_build_dummy_db()
+    
     # testing_store_articles()
 
     debug_table(debug_attrs = ['id', 'url', 'headline', 'parse_errors'])
 
-    # testing_print_db()
+    
