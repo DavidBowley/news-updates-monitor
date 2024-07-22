@@ -5,20 +5,21 @@
 
 """
 
-import requests
-import bs4
-from datetime import datetime
 import logging
 import time
+from datetime import datetime
 import shelve
 
+import requests
+import bs4
+from requests_throttler import BaseThrottler
 # Note: currently using my forked version of requests_throttler which removes the extra log handler
 # added. The original PyPI can be used but there will be doubled log entries and reduced formatting
 # ability.
 # PR submitted: https://github.com/se7entyse7en/requests-throttler/pull/19 but my fork can be used
 # until it's fixed:
 # pip install git+https://github.com/DavidBowley/requests-throttler.git@remove_log_handlers
-from requests_throttler import BaseThrottler
+
 
 class Article():
     """ An Article object represents one individual BBC News article
@@ -215,14 +216,14 @@ class Article():
 
 def testing_article_class():
     """ Test function for the Article class instance methods """
-    url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
+    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
     # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
     # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
     # BBC In-depth article
     # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo'
     # Article that should fail parsing (mostly)
-    # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
+    url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
     # Article that should fully fail parsing
     # url = 'https://webaim.org/techniques/forms/controls'
 
@@ -267,10 +268,9 @@ def get_news_urls(debug=None):
             news_urls.append('https://www.bbc.co.uk' + href)
     # Remove duplicate URLs
     news_urls = list(set(news_urls))
-    if debug is None:
-        return news_urls
-    else:
+    if debug is not None:
         return news_urls[:debug]
+    return news_urls
 
 def urls_to_parsed_articles(urls, delay):
     """ Takes a list of URLs and returns a list of Article objects 
