@@ -22,7 +22,7 @@ from requests_throttler import BaseThrottler
 
 
 class Article():
-    """ An Article object represents one individual BBC News article
+    """ An Article object represents a snapshot in time of one individual BBC News article
         It can be used to scrape and parse a news article given any valid BBC news URL
         Only designed to work with '/news/...' URLs - does NOT work with Live or Video posts etc.
     """
@@ -30,45 +30,21 @@ class Article():
     def __init__(self, url):
         self.url = url
         self.raw_html = ''
+        self.fetched_timestamp = None
         self.soup = None
-        # The first headline that we see (never changes)
-        self.headline = ''
-        # The first body that we see (never changes)
-        self.body = ''
-        # The first byline that we see (never changes)
-        self.byline = []
-        # The first article timestamps that we see (never changes)
-        # Could be multiple timestamps even on the first scrape (original and updated dates) as the
-        # article could have existed a while already
-        self.timestamp = []
-        # DEBUG: Captures every headline/body/byline/timestamp seen per article scrape *REGARDLESS*
-        # of whether it has changed
-        # [Not currently implemented]
-        self.all_future_headlines = []
-        self.all_future_bodies = []
-        self.all_future_bylines = []
-        self.all_future_timestamps = []
-        # Keeps a record of all headline/body/byline/timestamp changes seen on future article
-        # scrapes [Not currently implemented]
-        self.headline_changes = []
-        self.body_changes = []
-        self.byline_changes = []
-        self.timestamp_changes = []
-        # Records a timestamp for every fetch_html() call, so if the article hasn't changed we
-        # still have a record that we checked
-        self.timestamps_fetch = []
-        # Will potentially be used as a link between the Article object in persistent storage and
-        # the mapping from ID dict key -> Article object and/or URL dict key -> ID
-        # [Not currently implemented]
-        self.id = None
-        # Flag for if any errors have occurred during parsing
-        self.parse_errors = False
+        self.parsed = {
+        'headline': '',
+        'body': '',
+        'byline': [],
+        'timestamp': [],
+        'parse_errors': False
+        }
 
     def __str__(self):
         """ This may change for now but I need to pick something... 
             Going for both URL and headline for now
         """
-        return str(self.headline) + '\n' + str(self.url)
+        return str(self.parsed['headline']) + '\n' + str(self.url)
 
     def fetch_html(self):
         """ While currently used in some testing functions, it's likely this method won't actually
@@ -87,13 +63,13 @@ class Article():
 
     def parse_headline(self):
         """ Parses the article headline and logs a parse error if it fails """
-        self.headline = self.soup.h1.string
-        if self.headline is None:
+        self.parsed['headline'] = self.soup.h1.string
+        if self.parsed['headline'] is None:
             # pylint: disable-next=possibly-used-before-assignment
             logger.error('Parse Error: URL: %s --> Headline', self.url)
-            self.parse_errors = True
+            self.parsed['parse_errors'] = True
         else:
-            self.headline = str(self.headline)
+            self.parsed['headline'] = str(self.parsed['headline'])
 
     def parse_body(self):
         """ Parses the article body text and logs a parse error if it fails """
@@ -102,8 +78,8 @@ class Article():
             logger.error(
                 'Parse Error: URL: %s --> Body --> <div data-component=\'text-block\'>', self.url
                 )
-            self.body = None
-            self.parse_errors = True
+            self.parsed['body'] = None
+            self.parsed['parse_errors'] = True
             return
         for div in text_block_divs:
             paragraphs = div.find_all('p')
@@ -112,8 +88,8 @@ class Article():
                     'Parse Error: URL: %s --> Body --> ' +
                     '<div data-component=\'text-block\'> --> <p>', self.url
                     )
-                self.body = None
-                self.parse_errors = True
+                self.parsed['body'] = None
+                self.parsed['parse_errors'] = True
                 return
             for p in paragraphs:
                 # Delete class attribute from each parent <p>
@@ -124,9 +100,9 @@ class Article():
                     if isinstance(tag, bs4.element.Tag):
                         del tag['class']
                 # Each paragraph must be on a new line for future diff functions to work
-                self.body += str(p) + '\n'
+                self.parsed['body'] += str(p) + '\n'
         # The final <p> has a pointless '\n' so we strip this out
-        self.body = self.body.rstrip()
+        self.parsed['body'] = self.parsed['body'].rstrip()
 
     def parse_byline(self):
         """ The data is too inconsistent to create a reliable mapping (e.g. Author, Job Title, etc)
@@ -139,29 +115,29 @@ class Article():
             # There is no byline-block present (some articles don't have one)
             # Note that this means there is no parse error logging logic used here as there's no
             # way to differentiate between a broken parse or just no byline present on the page
-            self.byline = None
+            self.parsed['byline'] = None
         else:
             for string in byline_block_div.strings:
-                self.byline.append(str(string))
+                self.parsed['byline'].append(str(string))
 
     def parse_timestamp(self):
         """ At the time of writing, each visible date was inside a <time> element with a datetime
             attribute that conforms to ISO 8601. Although a max of 2 <time> elements have only
             ever been seen, for debugging purposes we will collect all of them to confirm this
             assumption.
-            self.timestamp will be a list of Datetime objects
+            self.parsed['timestamp'] will be a list of Datetime objects
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
         if len(time_tag) == 0:
             logger.error(
                 'Parse Error: URL: %s --> Timestamp --> <time data-testid=\'timestamp\'>', self.url
                 )
-            self.timestamp = None
-            self.parse_errors = True
+            self.parsed['timestamp'] = None
+            self.parsed['parse_errors'] = True
             return
         for tag in time_tag:
             iso_datetime = tag['datetime']
-            self.timestamp.append(datetime.fromisoformat(iso_datetime))
+            self.parsed['timestamp'].append(datetime.fromisoformat(iso_datetime))
 
     def debug_print(self):
         """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes
@@ -170,13 +146,13 @@ class Article():
         print('\n***URL***')
         print(self.url)
         print('\n***Headline***')
-        print(self.headline)
+        print(self.parsed['headline'])
         print('\n***Body***')
-        print(self.body)
+        print(self.parsed['body'])
         print('\n***Byline***')
-        print(self.byline)
+        print(self.parsed['byline'])
         print('\n***Timestamp***')
-        print(self.timestamp)
+        print(self.parsed['timestamp'])
 
     def debug_log_print(self):
         """ Calls logger.debug to output:
@@ -190,12 +166,14 @@ class Article():
             '\n\n***Byline***\n%s' +
             '\n\n***Timestamp***\n%s' +
             '\n\n',
-            self.url, self.parse_errors, self.headline, self.body, self.byline, self.timestamp
+            self.url, self.parsed['parse_errors'], self.parsed['headline'],
+            self.parsed['body'], self.parsed['byline'], self.parsed['timestamp']
             )
 
     def store(self):
         """ Stores the Article object in persistent storage
             Only used to store _new_ articles at the moment
+            Stores as a singleton list because we'll be adding other article snapshots later
         """
         # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
         # Can be re-souped from raw_html if needed
@@ -203,27 +181,36 @@ class Article():
         with shelve.open('articles_db') as db:
             # As we'll start at ID 1, if it doesn't exist then this is a new database
             if '1' not in db:
-                self.id = 1
+                _id = 1
             # Otherwise find the next ID available
             else:
                 keys = list(db.keys())
                 keys.sort(key=int)
                 last_id = int(keys[-1])
-                self.id = last_id + 1
-            db[str(self.id)] = self
-            logger.info('Added article object to ID %s', self.id)
+                _id = last_id + 1
+            db[str(_id)] = [self]
+            logger.info('Added article object to ID %s', _id)
+
+    def store_existing(self):
+        """ When storing an article object into an existing database entry
+            (e.g. because we've found a changed article and want to add it in)...
+            We can add to the existing list of article objects
+            We can also use this to get specific article snapshots, e.g.
+            e.g. db[key][0] would be the original article snapshot
+            and db[key][-1] would be the last article snapshot recorded
+        """
 
 
 def testing_article_class():
     """ Test function for the Article class instance methods """
     # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
     # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
-    # url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
+    url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
     # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
     # BBC In-depth article
     # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo'
     # Article that should fail parsing (mostly)
-    url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
+    # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
     # Article that should fully fail parsing
     # url = 'https://webaim.org/techniques/forms/controls'
 
@@ -245,7 +232,7 @@ def debug_file_to_article_object(filename):
 
 def request_html(url):
     """ Helper function for using requests to get the HTML """
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes
     # everywhere. Hard-coding as utf-8 shouldn't cause issues unless BBC change it for
     # random pages which is unlikely
@@ -334,13 +321,20 @@ def testing_store_articles():
     for article in articles:
         article.store()
 
-def debug_table(debug_attrs):
+def debug_table(attrs, parsed):
     """ Builds a data table inside a HTML file with all the information from the article objects we
         want to see.
         Currently pulls from template files in /debug_table/ (which is not part of the Git repo)
         but only using it for debugging so far.
-        debug_attrs = list of strings; must only include known Article object attributes
+        attrs = list of strings; must only include known Article object attributes (but NOT parsed)
+        parsed = dictionary keys as per article.parsed[...] to specify specific parsed info
+        The ID will always be output as the first column regardless of other details requested
     """
+    # pylint: disable=too-many-locals
+    # Agree with pylint that this function is too complex, however it's purely for internal
+    # debugging and won't be in the final version in this form. If I do decide to reuse parts of
+    # this (e.g. to make a dashboard) then I will definitely simplify it and remove some of the
+    # variables.
     with open('debug_table/top.html', encoding='utf-8') as f:
         template_start = f.read()
     with open('debug_table/bottom.html', encoding='utf-8') as f:
@@ -352,7 +346,11 @@ def debug_table(debug_attrs):
         indent(start_indent + 2) + '<caption>' + 'Debug Table' + '</caption>\n'
         )
     data_table_start += indent(start_indent+2) + '<tr>\n'
-    for th in debug_attrs:
+    data_table_start += indent(start_indent+4) + '<th>' + 'ID' + '</th>\n'
+    data_table_start += indent(start_indent+4) + '<th>' + 'Snapshot' + '</th>\n'
+    for th in attrs:
+        data_table_start += indent(start_indent+4) + '<th>' + th + '</th>\n'
+    for th in parsed:
         data_table_start += indent(start_indent+4) + '<th>' + th + '</th>\n'
     data_table_start += indent(start_indent+2) + '</tr>'
     # Overwrite existing HTML file if it exists
@@ -364,16 +362,27 @@ def debug_table(debug_attrs):
         ids = list(db.keys())
         ids.sort(key=int)
         for _id in ids:
-            article = db[_id]
-            article_dict = article.__dict__
-            data_row = ''
-            data_row += indent(start_indent+2) + '<tr>\n'
-            for attr in  debug_attrs:
-                data_row += indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
-            data_row += indent(start_indent+2) + '</tr>'
-            # Append to existing HTML file
-            with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
-                f.write(data_row + '\n\n')
+            article_list = db[_id]
+            n = 0
+            for article in article_list:
+                article_dict = article.__dict__
+                data_row = ''
+                data_row += indent(start_indent+2) + '<tr>\n'
+                data_row += indent(start_indent+4) + '<td>' + _id + '</td>\n'
+                data_row += indent(start_indent+4) + '<td>' + str(n) + '</td>\n'
+                for attr in  attrs:
+                    data_row += (
+                        indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
+                        )
+                for item in parsed:
+                    data_row += (
+                        indent(start_indent+4) + '<td>' + str(article.parsed[item]) + '</td>\n'
+                        )
+                data_row += indent(start_indent+2) + '</tr>'
+                # Append to existing HTML file
+                with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
+                    f.write(data_row + '\n\n')
+                n += 1
         data_table_end = indent(start_indent) + '</table>'
         # End the table and finalise file template - append to existing HTML file
         with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
@@ -444,4 +453,4 @@ if __name__ == '__main__':
 
     # testing_store_articles()
 
-    debug_table(debug_attrs = ['id', 'url', 'headline', 'body', 'byline', 'timestamp'])
+    debug_table(attrs = [], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
