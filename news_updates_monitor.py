@@ -11,6 +11,7 @@ from datetime import datetime
 import shelve
 
 import requests
+from requests.adapters import HTTPAdapter
 import bs4
 from requests_throttler import BaseThrottler
 # Note: currently using my forked version of requests_throttler which removes the extra log handler
@@ -201,6 +202,29 @@ class Article():
         """
 
 
+class TimeoutHTTPAdapter(HTTPAdapter):
+    """ Allows requests.Session() to use a modifed .send() method that injects a default timeout
+        value. It will not override any specific timeout keyword arguments set via the caller.
+    """
+    def __init__(self, *args, **kwargs):
+        if "timeout" in kwargs:
+            self.timeout = kwargs["timeout"]
+            del kwargs["timeout"]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        # pylint: disable=arguments-differ
+        # As far as I can tell, this is the most official non-offical way to get requests to
+        # actually work with a default global timeout on requests.Session(). There seems to be
+        # multiple reported issues online of **kwargs causing this to flag when using a subclass
+        # so I think this is a false positive. It's specifically recommended on the requests
+        # github here: https://github.com/psf/requests/issues/2011
+        timeout = kwargs.get("timeout")
+        if timeout is None and hasattr(self, 'timeout'):
+            kwargs["timeout"] = self.timeout
+        return super().send(request, **kwargs)
+
+
 def testing_article_class():
     """ Test function for the Article class instance methods """
     # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
@@ -232,12 +256,23 @@ def debug_file_to_article_object(filename):
 
 def request_html(url):
     """ Helper function for using requests to get the HTML """
-    response = requests.get(url, timeout=10)
-    # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes
-    # everywhere. Hard-coding as utf-8 shouldn't cause issues unless BBC change it for
-    # random pages which is unlikely
-    response.encoding = 'utf-8'
-    return response.text
+    try:
+        response = requests.get(url, timeout=10)
+        # Will raise exception for HTTPError (e.g. 404, off by default)
+        response.raise_for_status()
+        # For some reason Requests is auto-detecting the wrong encoding so we're getting Mojibakes
+        # everywhere. Hard-coding as utf-8 shouldn't cause issues unless BBC change it for
+        # random pages which is unlikely
+        response.encoding = 'utf-8'
+        return response.text
+    except requests.exceptions.RequestException as e:
+        logger.error(
+            'Request Error: URL: %s\n' +
+            'Exception __str__:\n%s\n' +
+            'Exception Type:\n%s\n',
+            url, e, type(e)
+            )
+        return None
 
 def get_news_urls(debug=None):
     """ Extracts all the news article URLs from the BBC Homepage
@@ -245,6 +280,10 @@ def get_news_urls(debug=None):
         debug = integer; flag to reduce the number returned for testing purposes
     """
     news_homepage = 'https://www.bbc.co.uk/news'
+    news_homepage_html = request_html(news_homepage)
+    # In the event of connection issues we don't want to carry on with the function
+    if news_homepage_html is None:
+        return None
     soup = bs4.BeautifulSoup(request_html(news_homepage), 'lxml')
     news_urls = []
     for link in soup.find_all('a'):
@@ -272,11 +311,36 @@ def urls_to_parsed_articles(urls, delay):
         request = requests.Request(method='GET', url=url)
         reqs.append(request)
 
+    # Create a custom session to pass to requests_throttler to configure global timeout
+    s = requests.Session()
+    s.mount('http://', TimeoutHTTPAdapter(timeout=10))
+    s.mount('https://', TimeoutHTTPAdapter(timeout=10))
+
     # Throttler queues all the requests and processes them slowly
     # This step can take a while depending on the delay and number of URLs
-    with BaseThrottler(name='base-throttler', delay=delay) as bt:
+    with BaseThrottler(name='base-throttler', delay=delay, session=s) as bt:
         throttled_requests = bt.multi_submit(reqs)
-    responses = [tr.response for tr in throttled_requests]
+
+    responses = []
+    for tr in throttled_requests:
+        # First check for any exceptions
+        if tr.exception is not None:
+            logger.error(
+                'Request Error: URL: %s\n' +
+                'Exception __str__:\n%s\n' +
+                'Exception Type:\n%s\n',
+                tr.request.url, tr.exception, type(tr.exception)
+                )
+        # The 3rd party library doesn't raise exception for HTTPError so we check
+        elif tr.response.status_code != 200:
+            logger.error(
+                'Request Error: URL: %s\n' +
+                'HTTP Error - Status Code: %s\n',
+                tr.request.url, tr.response.status_code
+                )
+        # Anything that gets to here is status code 200
+        else:
+            responses.append(tr.response)
 
     res = []
     for response in responses:
@@ -312,6 +376,20 @@ def get_latest_news():
 def testing_print_latest_news():
     """ Test function to debug_log print the latest news """
     articles = get_latest_news()
+    for article in articles:
+        article.debug_log_print()
+
+def testing_exceptions():
+    """ Test function to make sure Timeout, Connection and other exceptions
+        are working via requests_throttler
+    """
+    urls = [
+    'https://github.com/kennethreitz/requests/issues/1236',
+    'https://www.github.com',
+    'http://fjfklsfjksjdoijfkjsldf.com/',
+    'https://www.yahoo.co.uk',
+    ]
+    articles = urls_to_parsed_articles(urls, delay=5)
     for article in articles:
         article.debug_log_print()
 
