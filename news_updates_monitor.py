@@ -29,6 +29,7 @@ class Article():
     """
 
     def __init__(self, url):
+        self.id = None
         self.url = url
         self.raw_html = ''
         self.fetched_timestamp = None
@@ -180,18 +181,18 @@ class Article():
         # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
         # Can be re-souped from raw_html if needed
         self.soup = None
-        with shelve.open('articles_db') as db:
+        with shelve.open('db/articles_db') as db:
             # As we'll start at ID 1, if it doesn't exist then this is a new database
             if '1' not in db:
-                _id = 1
+                self.id = 1
             # Otherwise find the next ID available
             else:
                 keys = list(db.keys())
                 keys.sort(key=int)
                 last_id = int(keys[-1])
-                _id = last_id + 1
-            db[str(_id)] = [self]
-            logger.info('Added article object to ID %s', _id)
+                self.id = last_id + 1
+            db[str(self.id)] = [self]
+            logger.info('Added article object to ID %s', self.id)
 
     def store_existing(self):
         """ When storing an article object into an existing database entry
@@ -293,7 +294,7 @@ def testing_build_dummy_db():
 
 def testing_print_db():
     """ Test function: prints out the article objects from persistent storage """
-    with shelve.open('articles_db') as db:
+    with shelve.open('db/articles_db') as db:
         keys = list(db.keys())
         keys.sort(key=int)
         for key in keys:
@@ -336,7 +337,7 @@ def debug_table(attrs, parsed):
         f.write(template_start)
         f.write('\n\n' + data_table_start + '\n\n')
     # Start outputing the data rows
-    with shelve.open('articles_db') as db:
+    with shelve.open('db/articles_db') as db:
         ids = list(db.keys())
         ids.sort(key=int)
         for _id in ids:
@@ -411,25 +412,43 @@ def request_html(url):
 
 
 
-def testing_store_articles():
-    """ Test function to get the latest news and then store in persistent storage """
+
+def test_main_loop_storage():
+    with shelve.open('db/url_id_mapping_db') as db:
+        for key, val in db.items():
+            print('URL:', key, 'ID:', val)
+
+    debug_table(attrs = ['url'], parsed=['parse_errors', 'headline'])
+
+
+def main_loop():
+    """ ***Work-in-progress***
+        This will eventually be the function that repeats at set intervals in order to check for 
+        new or updated news articles, store them, note changes, etc.
+    """
+
+    # Likely will be called from __main__ at set intervals to keep checking for articles
+
+    # Fully parsed Article objects of the latest news from the homepage
     articles = get_latest_news()
+    
     for article in articles:
-        article.store()
+        with shelve.open('db/url_id_mapping_db') as db:
+            if article.url not in db:
+                article.store()
+                db[article.url] = article.id
+            else:
+                print("We've seen this article before:", article.url)
+                # This would be where we check for changes between the article objects
+                # and only store a new snapshot of it if there are confirmed changes
+                # Likely would check that last article object in the list of articles
+                # so we can see if it changed from when we last recorded a change
+
 
 def get_latest_news():
     """ Parses the latest news articles from the BBC news homepage
         Returns a list of article objects
     """
-    # DEBUG: only 2 hard-coded URLs
-    #urls = [
-    #'https://www.bbc.co.uk/news/articles/cw00rgq24xvo',
-    #'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
-    #]
-
-    # DEBUG: only 1 hard-coded URL
-    # urls = ['https://www.bbc.co.uk/news/articles/cw00rgq24xvo']
-
     urls = get_news_urls(debug=5)
     # As get_news_urls() has just been called, there has already been a HTTP request within the
     # last few milliseconds. It's possible the first request of the throttler will be sent too
@@ -437,7 +456,6 @@ def get_latest_news():
     time.sleep(2)
     articles = urls_to_parsed_articles(urls, delay=5)
     return articles
-
 
 def get_news_urls(debug=None):
     """ Extracts all the news article URLs from the BBC Homepage
@@ -466,7 +484,7 @@ def get_news_urls(debug=None):
 def urls_to_parsed_articles(urls, delay):
     """ Takes a list of URLs and returns a list of Article objects 
         with raw_html attribute value fetched via the requests_throttler
-        The returned objects should be ready to parse via self.parse_all()
+        The returned objects should be parsed Article objects ready to store/compare
         urls = list of strings
         delay = float; seconds to use for requests throttling
     """
@@ -555,6 +573,9 @@ if __name__ == '__main__':
 
     # testing_store_articles()
 
-    debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
+    # debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
+
+    # main_loop()
+    test_main_loop_storage()
 
     
