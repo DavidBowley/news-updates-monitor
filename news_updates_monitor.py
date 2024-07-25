@@ -7,7 +7,7 @@
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import shelve
 
 import requests
@@ -347,6 +347,9 @@ def urls_to_parsed_articles(urls, delay):
         response.encoding = 'utf-8'
         article = Article(response.url)
         article.raw_html = response.text
+        # Note: technically not when it is 'fetched' as that happens inside the threading of
+        # requests_throttler, so there could be up to a couple of minutes delay on this time
+        article.fetched_timestamp = datetime.now(timezone.utc)
         article.parse_all()
         res.append(article)
 
@@ -531,4 +534,4 @@ if __name__ == '__main__':
 
     # testing_store_articles()
 
-    debug_table(attrs = [], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
+    debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
