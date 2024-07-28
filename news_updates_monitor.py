@@ -184,18 +184,8 @@ class Article():
         # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
         # Can be re-souped from raw_html if needed
         self.soup = None
-        with shelve.open('db/articles_db') as db:
-            # As we'll start at ID 1, if it doesn't exist then this is a new database
-            if '1' not in db:
-                self.id = 1
-            # Otherwise find the next ID available
-            else:
-                keys = list(db.keys())
-                keys.sort(key=int)
-                last_id = int(keys[-1])
-                self.id = last_id + 1
-            db[str(self.id)] = [self]
-            logger.info('Added article object to ID %s', self.id)
+        # New storage process goes here
+        logger.info('Added article object to ID %s', 'DEBUG NOTE: not sure we need this now')
 
     def store_existing(self):
         """ When storing an article object into an existing database entry
@@ -241,9 +231,9 @@ class TimeoutHTTPAdapter(HTTPAdapter):
         return super().send(request, **kwargs)
 
 
-""" 
-    Start of Testing / Debug functions
-"""
+###
+### Start of Testing / Debug functions
+###
 
 def testing_print_latest_news():
     """ Test function to debug_log print the latest news """
@@ -389,19 +379,24 @@ def indent(spaces):
     return ' ' * spaces
 
 def testing_article_comparison():
-    article1 = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file.html')
+    """ Test function """
+    article1 = debug_file_to_article_object(
+        url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file.html'
+        )
     article1.fetched_timestamp = datetime.now(timezone.utc)
     article1.parse_all()
-    
-    article2 = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file2.html')
+
+    article2 = debug_file_to_article_object(
+        url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file2.html'
+        )
     article2.fetched_timestamp = datetime.now(timezone.utc)
     article2.parse_all()
-    
+
     print(article1.parsed == article2.parsed)
 
-""" 
-    End of Testing / Debug functions
-"""
+###
+### End of Testing / Debug functions
+###
 
 
 def request_html(url):
@@ -428,6 +423,7 @@ def request_html(url):
 
 
 def test_main_loop_storage():
+    """ Test function """
     with shelve.open('db/url_id_mapping_db') as db:
         for key, val in db.items():
             print('URL:', key, 'ID:', val)
@@ -445,7 +441,7 @@ def main_loop():
 
     # Fully parsed Article objects of the latest news from the homepage
     articles = get_latest_news()
-    
+
     for article in articles:
         with shelve.open('db/url_id_mapping_db') as db:
             if article.url not in db:
@@ -552,29 +548,45 @@ def urls_to_parsed_articles(urls, delay):
 
     return res
 
+def testing_create_table():
+    """ Test function """
+    con.execute("""
+        CREATE TABLE article(
+                article_id INTEGER PRIMARY KEY, 
+                url, 
+                raw_html, 
+                fetched_timestamp, 
+                headline, 
+                body, 
+                byline, 
+                _timestamp, 
+                parse_errors)
+                """)
+
 def testing_sqlite():
     """ Testing function: may be an instance method, or maybe not
     """
-    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html')
+    article = debug_file_to_article_object(
+        url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html'
+        )
     article.parse_all()
     row_dict = article.to_row_dict()
-    
+
     # In the app this will probably be at the beginning of the main_loop function
     con = sqlite3.connect('news_updates_monitor.db')
 
-    # con.execute('CREATE TABLE article(article_id INTEGER PRIMARY KEY, url, raw_html, fetched_timestamp, headline, body, byline, _timestamp, parse_errors)')
+    # testing_create_table()
 
-    res = con.execute("INSERT INTO article(url, raw_html, fetched_timestamp, headline, body, byline, _timestamp, parse_errors) VALUES(:url, :raw_html, :fetched_timestamp, :headline, :body, :byline, :_timestamp, :parse_errors)", row_dict)
+    # Format columns string for SQL query
+    columns = ', '.join(row_dict.keys())
+    # Format values string for SQL query based on named parameter binding syntax
+    values = ':' + ', :'.join(row_dict.keys())
+
+    con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
     con.commit()
 
-    #res = con.execute('SELECT * FROM article')
-    #for row in res.fetchall():
-    #    print(row)
-
+    # In the app this will probably be at the end of the main_loop
     con.close()
-
-
-
 
 
 if __name__ == '__main__':
@@ -600,21 +612,8 @@ if __name__ == '__main__':
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    # testing_get_latest_news()
-    # testing_anchor_links()
-    # testing_access_filtered_obj_attrs()
-    # testing_article_class()
-    # testing_print_latest_news()
-    # testing_print_db()
-    # testing_build_dummy_db()
-
-    # testing_store_articles()
-
-    # debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', '_timestamp'])
 
     # main_loop()
     # test_main_loop_storage()
 
     testing_sqlite()
-
-    
