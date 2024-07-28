@@ -9,6 +9,7 @@ import logging
 import time
 from datetime import datetime, timezone
 import shelve
+import sqlite3
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -29,7 +30,6 @@ class Article():
     """
 
     def __init__(self, url):
-        self.id = None
         self.url = url
         self.raw_html = ''
         self.fetched_timestamp = None
@@ -37,8 +37,8 @@ class Article():
         self.parsed = {
         'headline': '',
         'body': '',
-        'byline': [],
-        'timestamp': [],
+        'byline': '',
+        '_timestamp': '',
         'parse_errors': False
         }
 
@@ -119,27 +119,30 @@ class Article():
             # way to differentiate between a broken parse or just no byline present on the page
             self.parsed['byline'] = None
         else:
+            byline = []
             for string in byline_block_div.strings:
-                self.parsed['byline'].append(str(string))
+                byline.append(str(string))
+            self.parsed['byline'] = ', '.join(byline)
 
     def parse_timestamp(self):
         """ At the time of writing, each visible date was inside a <time> element with a datetime
             attribute that conforms to ISO 8601. Although a max of 2 <time> elements have only
             ever been seen, for debugging purposes we will collect all of them to confirm this
             assumption.
-            self.parsed['timestamp'] will be a list of Datetime objects
+            self.parsed['_timestamp'] will be a list of Datetime objects
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
         if len(time_tag) == 0:
             logger.error(
                 'Parse Error: URL: %s --> Timestamp --> <time data-testid=\'timestamp\'>', self.url
                 )
-            self.parsed['timestamp'] = None
+            self.parsed['_timestamp'] = None
             self.parsed['parse_errors'] = True
             return
+        iso_datetime = []
         for tag in time_tag:
-            iso_datetime = tag['datetime']
-            self.parsed['timestamp'].append(datetime.fromisoformat(iso_datetime))
+            iso_datetime.append(tag['datetime'])
+        self.parsed['_timestamp'] = ', '.join(iso_datetime)
 
     def debug_print(self):
         """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes
@@ -154,7 +157,7 @@ class Article():
         print('\n***Byline***')
         print(self.parsed['byline'])
         print('\n***Timestamp***')
-        print(self.parsed['timestamp'])
+        print(self.parsed['_timestamp'])
 
     def debug_log_print(self):
         """ Calls logger.debug to output:
@@ -170,7 +173,7 @@ class Article():
             '\n\n***Timestamp***\n%s' +
             '\n\n',
             self.url, self.fetched_timestamp, self.parsed['parse_errors'], self.parsed['headline'],
-            self.parsed['body'], self.parsed['byline'], self.parsed['timestamp']
+            self.parsed['body'], self.parsed['byline'], self.parsed['_timestamp']
             )
 
     def store(self):
@@ -202,6 +205,17 @@ class Article():
             e.g. db[key][0] would be the original article snapshot
             and db[key][-1] would be the last article snapshot recorded
         """
+
+    def to_row_dict(self):
+        """ Converts the Article object into a dictionary suitable for passing into the SQLite
+            database as a new row. The parsed dicitonary is also flattened out.
+        """
+        article_dict = self.__dict__
+        article_dict.update(article_dict['parsed'])
+        del article_dict['parsed']
+        del article_dict['soup']
+        return article_dict
+
 
 
 class TimeoutHTTPAdapter(HTTPAdapter):
@@ -538,6 +552,29 @@ def urls_to_parsed_articles(urls, delay):
 
     return res
 
+def testing_sqlite():
+    """ Testing function: may be an instance method, or maybe not
+    """
+    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html')
+    article.parse_all()
+    row_dict = article.to_row_dict()
+    
+    # In the app this will probably be at the beginning of the main_loop function
+    con = sqlite3.connect('news_updates_monitor.db')
+
+    # con.execute('CREATE TABLE article(article_id INTEGER PRIMARY KEY, url, raw_html, fetched_timestamp, headline, body, byline, _timestamp, parse_errors)')
+
+    res = con.execute("INSERT INTO article(url, raw_html, fetched_timestamp, headline, body, byline, _timestamp, parse_errors) VALUES(:url, :raw_html, :fetched_timestamp, :headline, :body, :byline, :_timestamp, :parse_errors)", row_dict)
+    con.commit()
+
+    #res = con.execute('SELECT * FROM article')
+    #for row in res.fetchall():
+    #    print(row)
+
+    con.close()
+
+
+
 
 
 if __name__ == '__main__':
@@ -573,9 +610,11 @@ if __name__ == '__main__':
 
     # testing_store_articles()
 
-    # debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', 'timestamp'])
+    # debug_table(attrs = ['fetched_timestamp'], parsed=['parse_errors', 'headline', 'body', 'byline', '_timestamp'])
 
     # main_loop()
-    test_main_loop_storage()
+    # test_main_loop_storage()
+
+    testing_sqlite()
 
     
