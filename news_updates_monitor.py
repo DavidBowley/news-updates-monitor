@@ -36,14 +36,16 @@ class Article():
         raw_html='',
         fetched_timestamp=None,
         soup=None,
-        parsed={
-        'headline': '',
-        'body': '',
-        'byline': '',
-        '_timestamp': '',
-        'parse_errors': False
-        }
+        parsed=None
         ):
+        if parsed is None:
+            parsed = {
+            'headline': '',
+            'body': '',
+            'byline': '',
+            '_timestamp': '',
+            'parse_errors': False
+            }
         self.url = url
         self.raw_html = raw_html
         self.fetched_timestamp = fetched_timestamp
@@ -647,4 +649,6 @@ if __name__ == '__main__':
     # main_loop()
     # test_main_loop_storage()
 
-    testing_table_row_to_article_obj()
+    # testing_table_row_to_article_obj()
+
+    testing_print_latest_news()
