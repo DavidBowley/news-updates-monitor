@@ -623,7 +623,8 @@ def testing_table_row_to_article_obj():
     # Build out the dictionary used in article.parsed (unflatten the object)
     parsed_keys = ['headline', 'body', 'byline', '_timestamp', 'parse_errors']
     parsed_dict = {key: row[key] for key in parsed_keys}
-
+    # Convert from SQLite Boolean to Python Boolean
+    parsed_dict['parse_errors'] = bool(parsed_dict['parse_errors'])
 
     article = Article(
         url=row['url'],
