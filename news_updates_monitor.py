@@ -5,7 +5,8 @@
 
 """
 
-import pprint
+import pprint # pylint: disable=unused-import
+              #         For debugging purposes, should be removed later
 import logging
 import time
 from datetime import datetime, timezone
@@ -30,14 +31,21 @@ class Article():
         Only designed to work with '/news/...' URLs - does NOT work with Live or Video posts etc.
     """
 
-    def __init__(
-        self,
-        url,
-        raw_html='',
-        fetched_timestamp=None,
-        soup=None,
-        parsed=None
-        ):
+    def __init__(self, **kwargs):
+        """
+        url = string
+        raw_html = string (default: None)
+        fetched_timestamp = ISO8601 datetime as string (default: None)
+        soup = bs4.BeautifulSoup.Soup object (default: None)
+        parsed = dict {
+            'headline': string (default: empty string)
+            'body': string (default: empty string)
+            'byline': string (default: empty string)
+            '_timestamp': ISO8601 datetime as string (default: empty string)
+            'parse_errors': boolean (default: False)
+            }
+        """
+        parsed = kwargs.get('parsed')
         if parsed is None:
             parsed = {
             'headline': '',
@@ -46,10 +54,10 @@ class Article():
             '_timestamp': '',
             'parse_errors': False
             }
-        self.url = url
-        self.raw_html = raw_html
-        self.fetched_timestamp = fetched_timestamp
-        self.soup = soup
+        self.url = kwargs.get('url')
+        self.raw_html = kwargs.get('raw_html')
+        self.fetched_timestamp = kwargs.get('fetched_timestamp')
+        self.soup = None
         self.parsed = parsed
 
     def __str__(self):
@@ -278,7 +286,7 @@ def testing_article_class():
     # Article that should fully fail parsing
     # url = 'https://webaim.org/techniques/forms/controls'
 
-    test_article = Article(url)
+    test_article = Article(url=url)
     test_article.fetch_html()
     test_article.parse_all()
     test_article.debug_log_print()
@@ -288,7 +296,7 @@ def debug_file_to_article_object(url, filename):
         instead of fetching a live URL
         Pulls the HTML into the self.raw_html attribute
     """
-    debug_article = Article(url)
+    debug_article = Article(url=url)
     with open(filename, encoding='utf-8') as my_file:
         debug_article.raw_html = my_file.read()
     return debug_article
@@ -548,7 +556,7 @@ def urls_to_parsed_articles(urls, delay):
     res = []
     for response in responses:
         response.encoding = 'utf-8'
-        article = Article(response.url)
+        article = Article(url=response.url)
         article.raw_html = response.text
         # Note: technically not when it is 'fetched' as that happens inside the threading of
         # requests_throttler, so there could be up to a couple of minutes delay on this time
@@ -599,8 +607,11 @@ def testing_sqlite():
     con.close()
 
 def dict_factory(cursor, row):
+    """ Factory used with SQLite3.Connection.row_factory
+        Produces a dict with column names as keys instead of the default tuple of values
+    """
     fields = [column[0] for column in cursor.description]
-    return {key: value for key, value in zip(fields, row)}
+    return dict(zip(fields, row))
 
 def testing_table_row_to_article_obj():
     """ Test function to convert an SQLite table row to an Article object
@@ -612,6 +623,8 @@ def testing_table_row_to_article_obj():
     # Build out the dictionary used in article.parsed (unflatten the object)
     parsed_keys = ['headline', 'body', 'byline', '_timestamp', 'parse_errors']
     parsed_dict = {key: row[key] for key in parsed_keys}
+
+
     article = Article(
         url=row['url'],
         raw_html=row['raw_html'],
@@ -619,7 +632,13 @@ def testing_table_row_to_article_obj():
         parsed=parsed_dict
         )
     article.debug_log_print()
+
     con.close()
+
+def testing_new_kwargs():
+    """ Test function """
+    article = Article(url='test')
+    article.debug_log_print()
 
 
 if __name__ == '__main__':
@@ -649,6 +668,8 @@ if __name__ == '__main__':
     # main_loop()
     # test_main_loop_storage()
 
-    # testing_table_row_to_article_obj()
+    testing_table_row_to_article_obj()
 
-    testing_print_latest_news()
+    # testing_print_latest_news()
+
+    # testing_new_kwargs()
