@@ -5,6 +5,7 @@
 
 """
 
+import pprint
 import logging
 import time
 from datetime import datetime, timezone
@@ -29,18 +30,25 @@ class Article():
         Only designed to work with '/news/...' URLs - does NOT work with Live or Video posts etc.
     """
 
-    def __init__(self, url):
-        self.url = url
-        self.raw_html = ''
-        self.fetched_timestamp = None
-        self.soup = None
-        self.parsed = {
+    def __init__(
+        self,
+        url,
+        raw_html='',
+        fetched_timestamp=None,
+        soup=None,
+        parsed={
         'headline': '',
         'body': '',
         'byline': '',
         '_timestamp': '',
         'parse_errors': False
         }
+        ):
+        self.url = url
+        self.raw_html = raw_html
+        self.fetched_timestamp = fetched_timestamp
+        self.soup = soup
+        self.parsed = parsed
 
     def __str__(self):
         """ This may change for now but I need to pick something... 
@@ -588,6 +596,29 @@ def testing_sqlite():
     # In the app this will probably be at the end of the main_loop
     con.close()
 
+def dict_factory(cursor, row):
+    fields = [column[0] for column in cursor.description]
+    return {key: value for key, value in zip(fields, row)}
+
+def testing_table_row_to_article_obj():
+    """ Test function to convert an SQLite table row to an Article object
+    """
+    con = sqlite3.connect('news_updates_monitor.db')
+    con.row_factory = dict_factory
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    row = cursor.fetchone()
+    # Build out the dictionary used in article.parsed (unflatten the object)
+    parsed_keys = ['headline', 'body', 'byline', '_timestamp', 'parse_errors']
+    parsed_dict = {key: row[key] for key in parsed_keys}
+    article = Article(
+        url=row['url'],
+        raw_html=row['raw_html'],
+        fetched_timestamp=row['fetched_timestamp'],
+        parsed=parsed_dict
+        )
+    article.debug_log_print()
+    con.close()
+
 
 if __name__ == '__main__':
 
@@ -616,4 +647,4 @@ if __name__ == '__main__':
     # main_loop()
     # test_main_loop_storage()
 
-    testing_sqlite()
+    testing_table_row_to_article_obj()
