@@ -147,7 +147,7 @@ class Article():
             attribute that conforms to ISO 8601. Although a max of 2 <time> elements have only
             ever been seen, for debugging purposes we will collect all of them to confirm this
             assumption.
-            self.parsed['_timestamp'] will be a list of Datetime objects
+            self.parsed['_timestamp'] will be an ISO8601 datetime stored as a string
         """
         time_tag = self.soup.find_all('time', attrs={'data-testid': 'timestamp'})
         if len(time_tag) == 0:
@@ -194,16 +194,22 @@ class Article():
             self.parsed['body'], self.parsed['byline'], self.parsed['_timestamp']
             )
 
-    def store(self):
+    def store(self, con):
         """ Stores the Article object in persistent storage
             Only used to store _new_ articles at the moment
-            Stores as a singleton list because we'll be adding other article snapshots later
+            con = sqlite3.Connection object (currenlty open DB connection from main_loop() )
         """
         # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
         # Can be re-souped from raw_html if needed
         self.soup = None
-        # New storage process goes here
-        logger.info('Added article object to ID %s', 'DEBUG NOTE: not sure we need this now')
+        row_dict = self.to_row_dict()
+        # Format columns string for SQL query
+        columns = ', '.join(row_dict.keys())
+        # Format values string for SQL query based on named parameter binding syntax
+        values = ':' + ', :'.join(row_dict.keys())
+        con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
+        con.commit()
+        logger.debug('NEW article found, added article object to database - URL: %s', self.url)
 
     def store_existing(self):
         """ When storing an article object into an existing database entry
@@ -460,17 +466,41 @@ def main_loop():
     # Fully parsed Article objects of the latest news from the homepage
     articles = get_latest_news()
 
+    # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
+    # exist, including creating the database schema
+    con = sqlite3.connect('news_updates_monitor.db')
+    # DEBUG: should the row_factory be set or am I ok with tuples?
+
     for article in articles:
-        with shelve.open('db/url_id_mapping_db') as db:
-            if article.url not in db:
-                article.store()
-                db[article.url] = article.id
-            else:
-                print("We've seen this article before:", article.url)
-                # This would be where we check for changes between the article objects
-                # and only store a new snapshot of it if there are confirmed changes
-                # Likely would check that last article object in the list of articles
-                # so we can see if it changed from when we last recorded a change
+        cursor = con.execute("SELECT * FROM article WHERE url = ?", (article.url,))
+        stored_articles = cursor.fetchall()
+        if len(stored_articles) == 0:
+            # New article previously unseen
+            article.store(con)
+        else:
+            c = 0
+            for row in stored_articles:
+                c += 1
+            logger.debug('We\'ve seen this article %s times: %s', c, article.url)
+            # This would be where we check for changes between the article objects
+            # and only store a new snapshot of it if there are confirmed changes
+            # Likely would check that last article object in the list of articles
+            # so we can see if it changed from when we last recorded a change
+            #
+            # Some more notes...
+            #
+            # 1. Get the last article we saw (one that matches query AND with the highest ID)
+            #    - may be some programmatic way to do this in sqlite, otherwise can do it manually
+            # 2. Create article object from table row: see testing_table_row_to_article_obj()
+            # 3. Compare the parsed dicitonaries of both article objects
+            #    - could be an article.compare(article2) type instance method?
+            # 4. If the same then there's no change
+            #    - look into some kind of separate logging for this to include timestamp
+            # 5. If there's a difference, then store the new article snapshot
+            # 6. Future functionality will compare changes on the articles but for now just log
+            #    that a change exists and store the new version
+
+    con.close()
 
 
 def get_latest_news():
@@ -560,7 +590,7 @@ def urls_to_parsed_articles(urls, delay):
         article.raw_html = response.text
         # Note: technically not when it is 'fetched' as that happens inside the threading of
         # requests_throttler, so there could be up to a couple of minutes delay on this time
-        article.fetched_timestamp = datetime.now(timezone.utc)
+        article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
         article.parse_all()
         res.append(article)
 
@@ -666,10 +696,10 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    # main_loop()
+    main_loop()
     # test_main_loop_storage()
 
-    testing_table_row_to_article_obj()
+    # testing_table_row_to_article_obj()
 
     # testing_print_latest_news()
 
