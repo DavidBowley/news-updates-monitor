@@ -195,8 +195,8 @@ class Article():
             )
 
     def store(self, con):
-        """ Stores the Article object in persistent storage
-            Only used to store _new_ articles at the moment
+        """ Stores the Article object in persistent storage using sqlite
+            Is now used to store both brand new articles and updates to existing articles
             con = sqlite3.Connection object (currenlty open DB connection from main_loop() )
         """
         # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
@@ -209,16 +209,7 @@ class Article():
         values = ':' + ', :'.join(row_dict.keys())
         con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
         con.commit()
-        logger.debug('NEW article found, added article object to database - URL: %s', self.url)
-
-    def store_existing(self):
-        """ When storing an article object into an existing database entry
-            (e.g. because we've found a changed article and want to add it in)...
-            We can add to the existing list of article objects
-            We can also use this to get specific article snapshots, e.g.
-            e.g. db[key][0] would be the original article snapshot
-            and db[key][-1] would be the last article snapshot recorded
-        """
+        logger.debug('Added article object to database: %s', self.url)
 
     def to_row_dict(self):
         """ Converts the Article object into a dictionary suitable for passing into the SQLite
@@ -229,6 +220,15 @@ class Article():
         del article_dict['parsed']
         del article_dict['soup']
         return article_dict
+
+    def is_copy(self, other):
+        """ Boolean function that checks if one Article object is a copy of another
+            The check is based on whether their parsed dictionaries have equal values
+            This protects against the other elements of the webpage chaninging
+            (which they do every few minutes)
+        """
+        return self.parsed == other.parsed
+
 
 
 
@@ -454,6 +454,23 @@ def test_main_loop_storage():
 
     debug_table(attrs = ['url'], parsed=['parse_errors', 'headline'])
 
+def table_row_to_article(row):
+    """ Converts an sqlite table row back to its original Article object
+        row = dict; output from sqlite3 article table using dict_factory
+    """
+    # Build out the dictionary used in article.parsed (unflatten the object)
+    parsed_keys = ['headline', 'body', 'byline', '_timestamp', 'parse_errors']
+    parsed_dict = {key: row[key] for key in parsed_keys}
+    # Convert from SQLite Boolean to Python Boolean
+    parsed_dict['parse_errors'] = bool(parsed_dict['parse_errors'])
+    stored_article = Article(
+        url=row['url'],
+        raw_html=row['raw_html'],
+        fetched_timestamp=row['fetched_timestamp'],
+        parsed=parsed_dict
+        )
+    return stored_article
+
 
 def main_loop():
     """ ***Work-in-progress***
@@ -466,10 +483,25 @@ def main_loop():
     # Fully parsed Article objects of the latest news from the homepage
     # articles = get_latest_news()
 
+    # Long-term the system will BOTH check for latest news, as well as check for updates to
+    # articles we already have in the database (maybe create both url lists and remove
+    # duplicates) but for eary-days debugging I'm going to focus on checking the existing
+    # articles I have in my 'day one' database against the live articles as I KNOW there are at
+    # least some changes to observe there.
+    # 
+    # In the future the checking of the current database will have to be limited in various ways,
+    # e.g. time - the longer an article exists, the less often I need to check it
+    #      number of queries - as the database gets bigger the actual requests could take longer
+    #      than the intervals assigned between the main_loop being activated
+
+    """
+    # In case I don't want to use a live article
     articles = []
-    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html')
+    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file_edited.html')
     article.parse_all()
     articles.append(article)
+    """
+
 
 
     # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
@@ -477,46 +509,56 @@ def main_loop():
     con = sqlite3.connect('news_updates_monitor.db')
     con.row_factory = dict_factory
 
+    articles = get_updated_news()
+
     for article in articles:
         cursor = con.execute("SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,))
         # The highest article_ID that matches the URL contains the most recent changes we've stored (if it exists)
-        last_article = cursor.fetchone()
-        if last_article is None:
+        row = cursor.fetchone()
+        if row is None:
             # New article previously unseen
             article.store(con)
         else:
+            
+            stored_article = table_row_to_article(row)
             logger.debug(
-                '\nPreviously seen article...\nURL: %s' + '\nLatest stored version at ID: %s',
-                last_article['url'], last_article['article_id']
+                '\nPreviously seen article at %s\n' + 'Latest stored version at ID: %s' +
+                '\nFetched article is_copy()? %s\n',
+                row['url'], row['article_id'], article.is_copy(stored_article)
                 )
-            # This would be where we check for changes between the article objects
-            # and only store a new snapshot of it if there are confirmed changes
-            # Likely would check that last article object in the list of articles
-            # so we can see if it changed from when we last recorded a change
-            #
-            # Some more notes...
-            #
-            # 1. Get the last article we saw (one that matches query AND with the highest ID)
-            #
-            #       stored_articles[-1] ?
-            #
-            #    - may be some programmatic way to do this in sqlite, otherwise can do it manually
-            # 2. Create article object from table row: see testing_table_row_to_article_obj()
-            # 3. Compare the parsed dicitonaries of both article objects
-            #    - could be an article.compare(article2) type instance method?
-            #    - see testing_article_comparison() also
-            # 4. If the same then there's no change
-            #    - look into some kind of separate logging for this to include timestamp
-            # 5. If there's a difference, then store the new article snapshot
-            # 6. Future functionality will compare changes on the articles but for now just log
-            #    that a change exists and store the new version
+            
+            if article.is_copy(stored_article):
+                # log some data like fetched_timestamp and changed=false/true in a separate table
+                # for debugging purposes but no need to store the actual article as it hasn't 
+                # changed
+                pass
+            else:
+                # This is a new version of an existing article, so should be stored
+                article.store(con)
+            
 
     con.close()
 
 
+def get_updated_news():
+    """ DEBUG: essentially this does the same as get_latest_news() except it uses the URLs from the
+        database instead of the latest news articles on the news homepage
+        Returns a list of parsed article objects
+        Note: unlike my other functions, the sqlite3.Connection object is not being passed
+              as an argument. This is because the main_loop() connection is using dict_factory
+              which makes returning the URLs as a sequence difficult. Multiple read connections
+              in sqlite are acceptable, but keep an eye on this fuction just in case.
+    """
+    con = sqlite3.connect('news_updates_monitor.db')
+    cursor = con.execute("SELECT DISTINCT url FROM article")
+    urls = [row[0] for row in cursor]
+    con.close()
+    articles = urls_to_parsed_articles(urls, delay=2)
+    return articles
+
 def get_latest_news():
     """ Parses the latest news articles from the BBC news homepage
-        Returns a list of article objects
+        Returns a list of parsed article objects
     """
     urls = get_news_urls(debug=5)
     # As get_news_urls() has just been called, there has already been a HTTP request within the
@@ -682,6 +724,35 @@ def testing_new_kwargs():
     article = Article(url='test')
     article.debug_log_print()
 
+def testing_live_changes():
+    """ Test function that checks to see what live changes on a real article might look like 
+        Testing with a full round of 1st day BBC News articles (about 30 articles in DB, only in once)
+        As the DB was built yesterday I expect at least a few of the articles should have some 
+        observerable changes
+    """
+    url = 'https://www.bbc.co.uk/news/articles/cd1r721pp8eo' # currently article_id = 1
+    article = Article(url=url)
+    article.fetch_html()
+    article.parse_all()
+    # article.debug_log_print()
+
+    con = sqlite3.connect('news_updates_monitor.db')
+    con.row_factory = dict_factory
+
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    row = cursor.fetchone()
+    logger.debug(
+        '\nPreviously seen article...\nURL: %s' + '\nLatest stored version at ID: %s',
+        row['url'], row['article_id']
+        )
+    stored_article = table_row_to_article(row)
+    comparison = article.is_copy(stored_article)
+
+    logger.debug(
+        'Does recently fetched article match the stored article?\n%s', comparison)
+
+    logger.debug('\n\nOriginal timestamp: %s\nUpdated timestamp: %s', stored_article.parsed['_timestamp'], article.parsed['_timestamp'])
+
 
 if __name__ == '__main__':
 
@@ -707,7 +778,7 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    main_loop()
+    
     # test_main_loop_storage()
 
     # testing_table_row_to_article_obj()
@@ -715,3 +786,7 @@ if __name__ == '__main__':
     # testing_print_latest_news()
 
     # testing_sqlite()
+
+    # testing_live_changes()
+
+    main_loop()
