@@ -464,24 +464,31 @@ def main_loop():
     # Likely will be called from __main__ at set intervals to keep checking for articles
 
     # Fully parsed Article objects of the latest news from the homepage
-    articles = get_latest_news()
+    # articles = get_latest_news()
+
+    articles = []
+    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html')
+    article.parse_all()
+    articles.append(article)
+
 
     # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
     # exist, including creating the database schema
     con = sqlite3.connect('news_updates_monitor.db')
-    # DEBUG: should the row_factory be set or am I ok with tuples?
+    con.row_factory = dict_factory
 
     for article in articles:
-        cursor = con.execute("SELECT * FROM article WHERE url = ?", (article.url,))
-        stored_articles = cursor.fetchall()
-        if len(stored_articles) == 0:
+        cursor = con.execute("SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,))
+        # The highest article_ID that matches the URL contains the most recent changes we've stored (if it exists)
+        last_article = cursor.fetchone()
+        if last_article is None:
             # New article previously unseen
             article.store(con)
         else:
-            c = 0
-            for row in stored_articles:
-                c += 1
-            logger.debug('We\'ve seen this article %s times: %s', c, article.url)
+            logger.debug(
+                '\nPreviously seen article...\nURL: %s' + '\nLatest stored version at ID: %s',
+                last_article['url'], last_article['article_id']
+                )
             # This would be where we check for changes between the article objects
             # and only store a new snapshot of it if there are confirmed changes
             # Likely would check that last article object in the list of articles
@@ -490,10 +497,14 @@ def main_loop():
             # Some more notes...
             #
             # 1. Get the last article we saw (one that matches query AND with the highest ID)
+            #
+            #       stored_articles[-1] ?
+            #
             #    - may be some programmatic way to do this in sqlite, otherwise can do it manually
             # 2. Create article object from table row: see testing_table_row_to_article_obj()
             # 3. Compare the parsed dicitonaries of both article objects
             #    - could be an article.compare(article2) type instance method?
+            #    - see testing_article_comparison() also
             # 4. If the same then there's no change
             #    - look into some kind of separate logging for this to include timestamp
             # 5. If there's a difference, then store the new article snapshot
@@ -703,4 +714,4 @@ if __name__ == '__main__':
 
     # testing_print_latest_news()
 
-    # testing_new_kwargs()
+    # testing_sqlite()
