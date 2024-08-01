@@ -12,6 +12,8 @@ import time
 from datetime import datetime, timezone
 import shelve
 import sqlite3
+import difflib
+import sys
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -696,34 +698,6 @@ def dict_factory(cursor, row):
     fields = [column[0] for column in cursor.description]
     return dict(zip(fields, row))
 
-def testing_table_row_to_article_obj():
-    """ Test function to convert an SQLite table row to an Article object
-    """
-    con = sqlite3.connect('news_updates_monitor.db')
-    con.row_factory = dict_factory
-    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
-    row = cursor.fetchone()
-    # Build out the dictionary used in article.parsed (unflatten the object)
-    parsed_keys = ['headline', 'body', 'byline', '_timestamp', 'parse_errors']
-    parsed_dict = {key: row[key] for key in parsed_keys}
-    # Convert from SQLite Boolean to Python Boolean
-    parsed_dict['parse_errors'] = bool(parsed_dict['parse_errors'])
-
-    article = Article(
-        url=row['url'],
-        raw_html=row['raw_html'],
-        fetched_timestamp=row['fetched_timestamp'],
-        parsed=parsed_dict
-        )
-    article.debug_log_print()
-
-    con.close()
-
-def testing_new_kwargs():
-    """ Test function """
-    article = Article(url='test')
-    article.debug_log_print()
-
 def testing_live_changes():
     """ Test function that checks to see what live changes on a real article might look like 
         Testing with a full round of 1st day BBC News articles (about 30 articles in DB, only in once)
@@ -752,6 +726,32 @@ def testing_live_changes():
         'Does recently fetched article match the stored article?\n%s', comparison)
 
     logger.debug('\n\nOriginal timestamp: %s\nUpdated timestamp: %s', stored_article.parsed['_timestamp'], article.parsed['_timestamp'])
+
+def testing_comparison():
+    con = sqlite3.connect('news_updates_monitor.db')
+    con.row_factory = dict_factory
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    article_a = table_row_to_article(cursor.fetchone())
+    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
+    article_b = table_row_to_article(cursor.fetchone())
+
+    text1 = article_a.parsed['body'].splitlines()
+    text2 = article_b.parsed['body'].splitlines()
+
+    with open('diff_html/template_top.html', encoding='utf-8') as f:
+        template_start = f.read()
+    with open('diff_html/template_bottom.html', encoding='utf-8') as f:
+        template_end = f.read()
+
+    d = difflib.HtmlDiff(wrapcolumn=75)
+    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
+
+    with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
+        f.write(template_start)
+        f.write(diff_table)
+        f.write(template_end)
+
+
 
 
 if __name__ == '__main__':
@@ -789,4 +789,6 @@ if __name__ == '__main__':
 
     # testing_live_changes()
 
-    main_loop()
+    # main_loop()
+
+    testing_comparison()
