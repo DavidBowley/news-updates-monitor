@@ -508,7 +508,8 @@ def main_loop():
 
     # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
     # exist, including creating the database schema
-    con = sqlite3.connect('news_updates_monitor.db')
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
     articles = get_updated_news()
@@ -551,7 +552,8 @@ def get_updated_news():
               which makes returning the URLs as a sequence difficult. Multiple read connections
               in sqlite are acceptable, but keep an eye on this fuction just in case.
     """
-    con = sqlite3.connect('news_updates_monitor.db')
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
     cursor = con.execute("SELECT DISTINCT url FROM article")
     urls = [row[0] for row in cursor]
     con.close()
@@ -676,7 +678,8 @@ def testing_sqlite():
     row_dict = article.to_row_dict()
 
     # In the app this will probably be at the beginning of the main_loop function
-    con = sqlite3.connect('news_updates_monitor.db')
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
 
     # testing_create_table()
 
@@ -710,7 +713,8 @@ def testing_live_changes():
     article.parse_all()
     # article.debug_log_print()
 
-    con = sqlite3.connect('news_updates_monitor.db')
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
     cursor = con.execute("SELECT * FROM article WHERE article_id=1")
@@ -727,13 +731,18 @@ def testing_live_changes():
 
     logger.debug('\n\nOriginal timestamp: %s\nUpdated timestamp: %s', stored_article.parsed['_timestamp'], article.parsed['_timestamp'])
 
+    con.close()
+
 def testing_comparison():
-    con = sqlite3.connect('news_updates_monitor.db')
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
     cursor = con.execute("SELECT * FROM article WHERE article_id=1")
     article_a = table_row_to_article(cursor.fetchone())
     cursor = con.execute("SELECT * FROM article WHERE article_id=31")
     article_b = table_row_to_article(cursor.fetchone())
+
+    con.close()
 
     text1 = article_a.parsed['body'].splitlines()
     text2 = article_b.parsed['body'].splitlines()
@@ -751,7 +760,12 @@ def testing_comparison():
         f.write(diff_table)
         f.write(template_end)
 
-
+def testing_foreign_keys_constraint():
+    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.execute('INSERT INTO fetch(url) VALUES(12345)')
+    con.commit()
+    con.close()
 
 
 if __name__ == '__main__':
@@ -791,4 +805,6 @@ if __name__ == '__main__':
 
     # main_loop()
 
-    testing_comparison()
+    # testing_comparison()
+
+    testing_foreign_keys_constraint()
