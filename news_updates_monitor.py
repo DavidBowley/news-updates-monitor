@@ -442,9 +442,6 @@ def main_loop():
 
     # Likely will be called from __main__ at set intervals to keep checking for articles
 
-    # Fully parsed Article objects of the latest news from the homepage
-    # articles = get_latest_news()
-
     # In case I don't want to use a live article
     # articles = []
     # article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo',
@@ -454,11 +451,37 @@ def main_loop():
 
     # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
     # exist, including creating the database schema
+    
+
+    # Fully parsed Article objects of the latest news from the homepage
+    # articles = get_latest_news()
+    # Fully parsed Article objects of the live versions of the existing article database
+    # articles = get_updated_news()
+
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
-    articles = get_updated_news()
+    new_urls = find_new_news()
+    for url in new_urls:
+        # New URLs always start on schedule_level 1
+        con.execute("INSERT INTO tracking VALUES(?, 1)", (url,))
+        con.commit()
+    logger.debug('Added %s new URLs into the tracking table', len(new_urls))
+    
+    # Start to build out the list of actual URLs to check...
+    # 1. All schedule_level 1's (note: this will include the recent new_urls added above)
+    # 2. Levels 2 to 6 that meet the criteria
+
+
+    # Temporarily stopping the function here so we can work on the logic of which articles to
+    # actually check each run
+
+    ##########
+    return
+    ##########
+
+
 
     for article in articles:
         cursor = con.execute(
@@ -488,6 +511,32 @@ def main_loop():
                 article.store(con)
 
     con.close()
+
+def find_new_news():
+    """ Parses BBC homepage for all news articles and checks if they are new to our system
+        Returns a list of URLs that should be added to our system
+    """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    latest_news_urls = get_news_urls()
+    cursor = con.execute("SELECT url FROM tracking")
+    stored_urls = [row[0] for row in cursor]
+    online_urls_not_in_storage = list(set(latest_news_urls) - set(stored_urls))
+    con.close()
+    return online_urls_not_in_storage
+
+    
+def debug_add_sample_tracking_data():
+    """ Add sample data - can delete once find_new_news() works """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    for i in range(1, 11):
+        test_url_bind = ('https://www.bbc.co.uk/news/articles/test' + str(i),)
+        con.execute("INSERT INTO tracking VALUES(?, 1)", test_url_bind)
+        con.commit()
+    con.close()
+
+
 
 def get_updated_news():
     """ DEBUG: essentially this does the same as get_latest_news() except it uses the URLs from the
@@ -625,3 +674,6 @@ if __name__ == '__main__':
 
 
     main_loop()
+    
+    # find_new_news()
+    # debug_add_sample_tracking_data()
