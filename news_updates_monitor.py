@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 import shelve
 import sqlite3
 import difflib
-import sys
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -164,21 +163,6 @@ class Article():
             iso_datetime.append(tag['datetime'])
         self.parsed['_timestamp'] = ', '.join(iso_datetime)
 
-    def debug_print(self):
-        """ Takes an article object and prints the Headline, Body, Byline, and Timestamp attributes
-            for debugging purposes
-        """
-        print('\n***URL***')
-        print(self.url)
-        print('\n***Headline***')
-        print(self.parsed['headline'])
-        print('\n***Body***')
-        print(self.parsed['body'])
-        print('\n***Byline***')
-        print(self.parsed['byline'])
-        print('\n***Timestamp***')
-        print(self.parsed['_timestamp'])
-
     def debug_log_print(self):
         """ Calls logger.debug to output:
             URL, Parse Errors (Boolean), Headline, Body, Byline, Timestamp
@@ -232,8 +216,6 @@ class Article():
         return self.parsed == other.parsed
 
 
-
-
 class TimeoutHTTPAdapter(HTTPAdapter):
     """ Allows requests.Session() to use a modifed .send() method that injects a default timeout
         value. It will not override any specific timeout keyword arguments set via the caller.
@@ -245,6 +227,7 @@ class TimeoutHTTPAdapter(HTTPAdapter):
         super().__init__(*args, **kwargs)
 
     def send(self, request, **kwargs):
+        """ Function that overrides the default requests.Session().send() """
         # pylint: disable=arguments-differ
         # As far as I can tell, this is the most official non-offical way to get requests to
         # actually work with a default global timeout on requests.Session(). There seems to be
@@ -261,12 +244,6 @@ class TimeoutHTTPAdapter(HTTPAdapter):
 ### Start of Testing / Debug functions
 ###
 
-def testing_print_latest_news():
-    """ Test function to debug_log print the latest news """
-    articles = get_latest_news()
-    for article in articles:
-        article.debug_log_print()
-
 def testing_exceptions():
     """ Test function to make sure Timeout, Connection and other exceptions
         are working via requests_throttler
@@ -281,24 +258,6 @@ def testing_exceptions():
     for article in articles:
         article.debug_log_print()
 
-def testing_article_class():
-    """ Test function for the Article class instance methods """
-    # url = 'https://www.bbc.co.uk/news/articles/cw00rgq24xvo'
-    # url = 'https://www.bbc.co.uk/news/articles/c4ngk17zzkpo'
-    url = 'https://www.bbc.co.uk/news/articles/cq5xel42801o'
-    # url ='https://www.bbc.co.uk/news/articles/cl4y8ljjexro'
-    # BBC In-depth article
-    # url = 'https://www.bbc.co.uk/news/articles/c0www3qvx2zo'
-    # Article that should fail parsing (mostly)
-    # url = 'https://www.bbc.co.uk/news/live/cljy6yz1j6gt'
-    # Article that should fully fail parsing
-    # url = 'https://webaim.org/techniques/forms/controls'
-
-    test_article = Article(url=url)
-    test_article.fetch_html()
-    test_article.parse_all()
-    test_article.debug_log_print()
-
 def debug_file_to_article_object(url, filename):
     """ Debugging function: turn an offline file into an article object for testing purposes
         instead of fetching a live URL
@@ -308,27 +267,6 @@ def debug_file_to_article_object(url, filename):
     with open(filename, encoding='utf-8') as my_file:
         debug_article.raw_html = my_file.read()
     return debug_article
-
-def testing_shelves():
-    """ Test function """
-    with shelve.open('testing_db') as db:
-        # db['testing'] = 'This is a test'
-        temp = db['testing']
-        print(temp)
-
-def testing_build_dummy_db():
-    """ Test function: builds a dummy database with IDs ready for testing """
-    with shelve.open('articles_db') as db:
-        for i in range(10, 0, -1):
-            db[str(i)] = None
-
-def testing_print_db():
-    """ Test function: prints out the article objects from persistent storage """
-    with shelve.open('db/articles_db') as db:
-        keys = list(db.keys())
-        keys.sort(key=int)
-        for key in keys:
-            print(key, db[key])
 
 def debug_table(attrs, parsed):
     """ Builds a data table inside a HTML file with all the information from the article objects we
@@ -404,26 +342,60 @@ def indent(spaces):
     """
     return ' ' * spaces
 
-def testing_article_comparison():
+def test_main_loop_storage():
     """ Test function """
-    article1 = debug_file_to_article_object(
-        url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file.html'
-        )
-    article1.fetched_timestamp = datetime.now(timezone.utc)
-    article1.parse_all()
+    with shelve.open('db/url_id_mapping_db') as db:
+        for key, val in db.items():
+            print('URL:', key, 'ID:', val)
 
-    article2 = debug_file_to_article_object(
-        url='https://www.bbc.co.uk/news/articles/cjqep1ew419o', filename='test_file2.html'
-        )
-    article2.fetched_timestamp = datetime.now(timezone.utc)
-    article2.parse_all()
+    debug_table(attrs = ['url'], parsed=['parse_errors', 'headline'])
 
-    print(article1.parsed == article2.parsed)
+def testing_comparison():
+    """ Proof of concept for showing visual differences in article objects """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    article_a = table_row_to_article(cursor.fetchone())
+    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
+    article_b = table_row_to_article(cursor.fetchone())
+
+    con.close()
+
+    text1 = article_a.parsed['body'].splitlines()
+    text2 = article_b.parsed['body'].splitlines()
+
+    with open('diff_html/template_top.html', encoding='utf-8') as f:
+        template_start = f.read()
+    with open('diff_html/template_bottom.html', encoding='utf-8') as f:
+        template_end = f.read()
+
+    d = difflib.HtmlDiff(wrapcolumn=75)
+    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
+
+    with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
+        f.write(template_start)
+        f.write(diff_table)
+        f.write(template_end)
+
+def testing_foreign_keys_constraint():
+    """ Testing foreign keys constraint """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.execute('INSERT INTO fetch(url) VALUES(12345)')
+    con.commit()
+    con.close()
 
 ###
 ### End of Testing / Debug functions
 ###
 
+def dict_factory(cursor, row):
+    """ Factory used with SQLite3.Connection.row_factory
+        Produces a dict with column names as keys instead of the default tuple of values
+    """
+    fields = [column[0] for column in cursor.description]
+    return dict(zip(fields, row))
 
 def request_html(url):
     """ Helper function for using requests to get the HTML """
@@ -445,17 +417,6 @@ def request_html(url):
             )
         return None
 
-
-
-
-def test_main_loop_storage():
-    """ Test function """
-    with shelve.open('db/url_id_mapping_db') as db:
-        for key, val in db.items():
-            print('URL:', key, 'ID:', val)
-
-    debug_table(attrs = ['url'], parsed=['parse_errors', 'headline'])
-
 def table_row_to_article(row):
     """ Converts an sqlite table row back to its original Article object
         row = dict; output from sqlite3 article table using dict_factory
@@ -473,7 +434,6 @@ def table_row_to_article(row):
         )
     return stored_article
 
-
 def main_loop():
     """ ***Work-in-progress***
         This will eventually be the function that repeats at set intervals in order to check for 
@@ -485,63 +445,49 @@ def main_loop():
     # Fully parsed Article objects of the latest news from the homepage
     # articles = get_latest_news()
 
-    # Long-term the system will BOTH check for latest news, as well as check for updates to
-    # articles we already have in the database (maybe create both url lists and remove
-    # duplicates) but for eary-days debugging I'm going to focus on checking the existing
-    # articles I have in my 'day one' database against the live articles as I KNOW there are at
-    # least some changes to observe there.
-    # 
-    # In the future the checking of the current database will have to be limited in various ways,
-    # e.g. time - the longer an article exists, the less often I need to check it
-    #      number of queries - as the database gets bigger the actual requests could take longer
-    #      than the intervals assigned between the main_loop being activated
-
-    """
     # In case I don't want to use a live article
-    articles = []
-    article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file_edited.html')
-    article.parse_all()
-    articles.append(article)
-    """
-
-
+    # articles = []
+    # article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo',
+    #           filename='test_file_edited.html')
+    # article.parse_all()
+    # articles.append(article)
 
     # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
     # exist, including creating the database schema
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
     articles = get_updated_news()
 
     for article in articles:
-        cursor = con.execute("SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,))
-        # The highest article_ID that matches the URL contains the most recent changes we've stored (if it exists)
+        cursor = con.execute(
+            "SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,)
+            )
+        # The highest article_ID that matches the URL contains the most recent changes we've stored
+        # (if it exists)
         row = cursor.fetchone()
         if row is None:
             # New article previously unseen
             article.store(con)
         else:
-            
             stored_article = table_row_to_article(row)
             logger.debug(
                 '\nPreviously seen article at %s\n' + 'Latest stored version at ID: %s' +
                 '\nFetched article is_copy()? %s\n',
                 row['url'], row['article_id'], article.is_copy(stored_article)
                 )
-            
+
             if article.is_copy(stored_article):
                 # log some data like fetched_timestamp and changed=false/true in a separate table
-                # for debugging purposes but no need to store the actual article as it hasn't 
+                # for debugging purposes but no need to store the actual article as it hasn't
                 # changed
                 pass
             else:
                 # This is a new version of an existing article, so should be stored
                 article.store(con)
-            
 
     con.close()
-
 
 def get_updated_news():
     """ DEBUG: essentially this does the same as get_latest_news() except it uses the URLs from the
@@ -552,7 +498,7 @@ def get_updated_news():
               which makes returning the URLs as a sequence difficult. Multiple read connections
               in sqlite are acceptable, but keep an eye on this fuction just in case.
     """
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     cursor = con.execute("SELECT DISTINCT url FROM article")
     urls = [row[0] for row in cursor]
@@ -569,7 +515,7 @@ def get_latest_news():
     # last few milliseconds. It's possible the first request of the throttler will be sent too
     # close to the homepage scrape request - so we delay to avoid this
     time.sleep(2)
-    articles = urls_to_parsed_articles(urls, delay=5)
+    articles = urls_to_parsed_articles(urls, delay=2)
     return articles
 
 def get_news_urls(debug=None):
@@ -653,120 +599,6 @@ def urls_to_parsed_articles(urls, delay):
 
     return res
 
-def testing_create_table():
-    """ Test function """
-    con.execute("""
-        CREATE TABLE article(
-                article_id INTEGER PRIMARY KEY, 
-                url, 
-                raw_html, 
-                fetched_timestamp, 
-                headline, 
-                body, 
-                byline, 
-                _timestamp, 
-                parse_errors)
-                """)
-
-def testing_sqlite():
-    """ Testing function: may be an instance method, or maybe not
-    """
-    article = debug_file_to_article_object(
-        url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo', filename='test_file.html'
-        )
-    article.parse_all()
-    row_dict = article.to_row_dict()
-
-    # In the app this will probably be at the beginning of the main_loop function
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-
-    # testing_create_table()
-
-    # Format columns string for SQL query
-    columns = ', '.join(row_dict.keys())
-    # Format values string for SQL query based on named parameter binding syntax
-    values = ':' + ', :'.join(row_dict.keys())
-
-    con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
-    con.commit()
-
-    # In the app this will probably be at the end of the main_loop
-    con.close()
-
-def dict_factory(cursor, row):
-    """ Factory used with SQLite3.Connection.row_factory
-        Produces a dict with column names as keys instead of the default tuple of values
-    """
-    fields = [column[0] for column in cursor.description]
-    return dict(zip(fields, row))
-
-def testing_live_changes():
-    """ Test function that checks to see what live changes on a real article might look like 
-        Testing with a full round of 1st day BBC News articles (about 30 articles in DB, only in once)
-        As the DB was built yesterday I expect at least a few of the articles should have some 
-        observerable changes
-    """
-    url = 'https://www.bbc.co.uk/news/articles/cd1r721pp8eo' # currently article_id = 1
-    article = Article(url=url)
-    article.fetch_html()
-    article.parse_all()
-    # article.debug_log_print()
-
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.row_factory = dict_factory
-
-    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
-    row = cursor.fetchone()
-    logger.debug(
-        '\nPreviously seen article...\nURL: %s' + '\nLatest stored version at ID: %s',
-        row['url'], row['article_id']
-        )
-    stored_article = table_row_to_article(row)
-    comparison = article.is_copy(stored_article)
-
-    logger.debug(
-        'Does recently fetched article match the stored article?\n%s', comparison)
-
-    logger.debug('\n\nOriginal timestamp: %s\nUpdated timestamp: %s', stored_article.parsed['_timestamp'], article.parsed['_timestamp'])
-
-    con.close()
-
-def testing_comparison():
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.row_factory = dict_factory
-    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
-    article_a = table_row_to_article(cursor.fetchone())
-    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
-    article_b = table_row_to_article(cursor.fetchone())
-
-    con.close()
-
-    text1 = article_a.parsed['body'].splitlines()
-    text2 = article_b.parsed['body'].splitlines()
-
-    with open('diff_html/template_top.html', encoding='utf-8') as f:
-        template_start = f.read()
-    with open('diff_html/template_bottom.html', encoding='utf-8') as f:
-        template_end = f.read()
-
-    d = difflib.HtmlDiff(wrapcolumn=75)
-    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
-
-    with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
-        f.write(template_start)
-        f.write(diff_table)
-        f.write(template_end)
-
-def testing_foreign_keys_constraint():
-    con = sqlite3.connect('news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.execute('INSERT INTO fetch(url) VALUES(12345)')
-    con.commit()
-    con.close()
-
 
 if __name__ == '__main__':
 
@@ -792,19 +624,4 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    
-    # test_main_loop_storage()
-
-    # testing_table_row_to_article_obj()
-
-    # testing_print_latest_news()
-
-    # testing_sqlite()
-
-    # testing_live_changes()
-
-    # main_loop()
-
-    # testing_comparison()
-
-    testing_foreign_keys_constraint()
+    main_loop()
