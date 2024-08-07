@@ -193,9 +193,11 @@ class Article():
         columns = ', '.join(row_dict.keys())
         # Format values string for SQL query based on named parameter binding syntax
         values = ':' + ', :'.join(row_dict.keys())
-        con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
+        cursor = con.execute(f"INSERT INTO article({columns}) VALUES({values})", row_dict)
         con.commit()
-        logger.debug('Added article object to database: %s', self.url)
+        article_id = cursor.lastrowid
+        logger.debug('Added article object to article table at ID %s: %s',article_id, self.url)
+        return article_id
 
     def to_row_dict(self):
         """ Converts the Article object into a dictionary suitable for passing into the SQLite
@@ -462,6 +464,12 @@ def main_loop():
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
+    # Update Tracking table to make sure all schedule_levels are up to date
+    #
+    # Need to add logic for when we have real articles in...
+    # Need to add logic for the rare case when no fetch has taken place (e.g. connection issues)
+
+    # Find new news articles that we haven't yet seen and add them to the Tracking table
     new_urls = find_new_news()
     for url in new_urls:
         # New URLs always start on schedule_level 1
@@ -469,6 +477,9 @@ def main_loop():
         con.commit()
     logger.debug('Added %s new URLs into the tracking table', len(new_urls))
     
+    articles = urls_to_parsed_articles(urls=calculate_scheduled_urls(), delay=2)
+
+
     # Start to build out the list of actual URLs to check...
     # 1. All schedule_level 1's (note: this will include the recent new_urls added above)
     # 2. Levels 2 to 6 that meet the criteria
@@ -478,9 +489,8 @@ def main_loop():
     # actually check each run
 
     ##########
-    return
+    # return
     ##########
-
 
 
     for article in articles:
@@ -492,7 +502,15 @@ def main_loop():
         row = cursor.fetchone()
         if row is None:
             # New article previously unseen
-            article.store(con)
+            article_id = article.store(con)
+            # Log the fetch data
+            # Note that the logic of a first-time article is still to consider it 'changed'
+            bind = (article.url, article.fetched_timestamp, True, article_id)
+            con.execute("""
+                INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
+                VALUES(?, ?, ?, ?)
+                """, bind)
+            con.commit()
         else:
             stored_article = table_row_to_article(row)
             logger.debug(
@@ -502,15 +520,90 @@ def main_loop():
                 )
 
             if article.is_copy(stored_article):
-                # log some data like fetched_timestamp and changed=false/true in a separate table
-                # for debugging purposes but no need to store the actual article as it hasn't
-                # changed
-                pass
+                # No changes so just log the fetch data
+                bind = (article.url, article.fetched_timestamp, False)
+                con.execute(
+                    "INSERT INTO fetch('url', 'fetched_timestamp', 'changed') VALUES(?, ?, ?)", bind
+                    )
+                con.commit()
             else:
                 # This is a new version of an existing article, so should be stored
-                article.store(con)
+                article_id = article.store(con)
+                # Log the fetch data
+                bind = (article.url, article.fetched_timestamp, True, article_id)
+                con.execute("""
+                    INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
+                    VALUES(?, ?, ?, ?)
+                    """, bind)
+                con.commit()
 
     con.close()
+
+def testing_getting_article_id():
+    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
+    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
+    article.parse_all()
+
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
+
+    article_id = article.store(con)
+    print(article_id)
+
+
+def testing_fetch_insert_changed():
+    """ Test function - for if article has changed """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+
+    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
+    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
+    article.parse_all()
+
+    bind = (article.url, article.fetched_timestamp, True, 1)
+
+    con.execute("""
+        INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
+        VALUES(?, ?, ?, ?)
+        """, bind)
+    con.commit()
+
+    con.close() 
+
+def testing_fetch_insert_not_changed():
+    """ Test function - for if article has NOT changed """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+
+    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
+    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
+    article.parse_all()
+
+    bind = (article.url, article.fetched_timestamp, False)
+
+    con.execute(
+        "INSERT INTO fetch('url', 'fetched_timestamp', 'changed') VALUES(?, ?, ?)", bind
+        )
+    con.commit()
+
+    con.close() 
+
+def calculate_scheduled_urls():
+    """ Still in test phase so currently only calculates level 1's """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    
+    # Levels 1's
+    cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=1')
+    level_1_urls = [row[0] for row in cursor]
+
+    # Level 2's
+    # Return a list of all level 2s, then check for the time difference between now and last fetch
+
+    con.close()
+
+    return level_1_urls
 
 def find_new_news():
     """ Parses BBC homepage for all news articles and checks if they are new to our system
@@ -527,13 +620,14 @@ def find_new_news():
 
     
 def debug_add_sample_tracking_data():
-    """ Add sample data - can delete once find_new_news() works """
+    """ Add sample data """
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
-    for i in range(1, 11):
-        test_url_bind = ('https://www.bbc.co.uk/news/articles/test' + str(i),)
-        con.execute("INSERT INTO tracking VALUES(?, 1)", test_url_bind)
-        con.commit()
+    for level in range(1, 7):
+        for i in range(2):
+            bind = ('https://www.bbc.co.uk/news/articles/test_level_' + str(level) + '____' + str(i), level)
+            con.execute("INSERT INTO tracking VALUES(?, ?)", bind)
+            con.commit()
     con.close()
 
 
@@ -675,5 +769,10 @@ if __name__ == '__main__':
 
     main_loop()
     
-    # find_new_news()
     # debug_add_sample_tracking_data()
+
+    # calculate_scheduled_urls()
+
+    # testing_fetch_insert_not_changed()
+
+    # testing_getting_article_id()
