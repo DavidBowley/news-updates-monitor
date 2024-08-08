@@ -479,20 +479,6 @@ def main_loop():
     
     articles = urls_to_parsed_articles(urls=calculate_scheduled_urls(), delay=2)
 
-
-    # Start to build out the list of actual URLs to check...
-    # 1. All schedule_level 1's (note: this will include the recent new_urls added above)
-    # 2. Levels 2 to 6 that meet the criteria
-
-
-    # Temporarily stopping the function here so we can work on the logic of which articles to
-    # actually check each run
-
-    ##########
-    # return
-    ##########
-
-
     for article in articles:
         cursor = con.execute(
             "SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,)
@@ -590,36 +576,66 @@ def testing_fetch_insert_not_changed():
     con.close() 
 
 def calculate_scheduled_urls():
-    """ Still in test phase so currently only calculates level 1's """
+    """ Works out which URLs from the Tracking table should be fetched. The schedule is as follows:
+        Level 1: every 15 minutes
+        Level 2: every hour
+        Level 3: 3 times a day (every 8 hours)
+        Level 4: every day
+        Level 5: every week
+        Level 6: every month
+        
+     """
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     
+    all_urls = []
+    schedule_results = {}
+
     # Levels 1's
+    # No need to set a schedule assuming the main_loop fires every 15 minutes
+    # as this is the interval we want anyway
     cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=1')
     level_1_urls = [row[0] for row in cursor]
+    all_urls.extend(level_1_urls)
+    schedule_results[1] = len(level_1_urls)
 
-    # Level 2's
-    level_2_schedule = timedelta(hours=0.5)
-    level_2_urls = []
-    # Return a list of all level 2s, then check for the time difference between now and last fetch
-    cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=2')
-    for row in cursor:
-        url = row[0]
-        fetch_cursor = con.execute(
-            "SELECT fetched_timestamp FROM fetch WHERE url=? ORDER BY fetch_id DESC LIMIT 1", (url,)
-            )
-        last_fetched_timestamp = datetime.fromisoformat(fetch_cursor.fetchone()[0])
-        time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
-        print(time_since_fetch)
-        print(level_2_schedule)
-        if time_since_fetch >= level_2_schedule:
-            level_2_urls.append(url)
+    # Setup schedule levels
+    schedule_level = {
+    2: timedelta(hours=1),
+    3: timedelta(hours=8),
+    4: timedelta(days=1),
+    5: timedelta(weeks=1),
+    6: timedelta(weeks=4)
+    }
+
+    # Levels 2 through 6 are only fetched if the required amount of wait_time has elapsed
+    for level, wait_time in schedule_level.items():
+        urls = []
+        cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=?', (level,))
+        for row in cursor:
+            url = row[0]
+            fetch_cursor = con.execute(
+                "SELECT fetched_timestamp FROM fetch WHERE url=? ORDER BY fetch_id DESC LIMIT 1", (url,)
+                )
+            last_fetched_timestamp = datetime.fromisoformat(fetch_cursor.fetchone()[0])
+            time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
+            print(time_since_fetch)
+            print(wait_time)
+            if time_since_fetch >= wait_time:
+                urls.append(url)
+        schedule_results[level] = len(urls)
+        all_urls.extend(urls)
     
-    print(level_2_urls)
+    schedule_results_str = ''
+    for level, res in schedule_results.items():
+        schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + '\n'
+    logger.debug(
+        '\nSchedule for current run calculated - the following articles will be fetched...\n%s' +
+        'Total: %s', schedule_results_str, len(all_urls))
 
     con.close()
 
-    return level_1_urls
+    return all_urls
 
 def find_new_news():
     """ Parses BBC homepage for all news articles and checks if they are new to our system
@@ -783,11 +799,11 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    # main_loop()
+    main_loop()
     
     # debug_add_sample_tracking_data()
 
-    calculate_scheduled_urls()
+    # calculate_scheduled_urls()
 
     # testing_fetch_insert_not_changed()
 
