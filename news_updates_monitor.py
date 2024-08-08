@@ -9,7 +9,7 @@ import pprint # pylint: disable=unused-import
               #         For debugging purposes, should be removed later
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import shelve
 import sqlite3
 import difflib
@@ -599,7 +599,23 @@ def calculate_scheduled_urls():
     level_1_urls = [row[0] for row in cursor]
 
     # Level 2's
+    level_2_schedule = timedelta(hours=0.5)
+    level_2_urls = []
     # Return a list of all level 2s, then check for the time difference between now and last fetch
+    cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=2')
+    for row in cursor:
+        url = row[0]
+        fetch_cursor = con.execute(
+            "SELECT fetched_timestamp FROM fetch WHERE url=? ORDER BY fetch_id DESC LIMIT 1", (url,)
+            )
+        last_fetched_timestamp = datetime.fromisoformat(fetch_cursor.fetchone()[0])
+        time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
+        print(time_since_fetch)
+        print(level_2_schedule)
+        if time_since_fetch >= level_2_schedule:
+            level_2_urls.append(url)
+    
+    print(level_2_urls)
 
     con.close()
 
@@ -767,11 +783,11 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    main_loop()
+    # main_loop()
     
     # debug_add_sample_tracking_data()
 
-    # calculate_scheduled_urls()
+    calculate_scheduled_urls()
 
     # testing_fetch_insert_not_changed()
 
