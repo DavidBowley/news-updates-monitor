@@ -611,13 +611,19 @@ def calculate_scheduled_urls():
     # Levels 2 through 6 are only fetched if the required amount of wait_time has elapsed
     for level, wait_time in schedule_level.items():
         urls = []
-        cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=?', (level,))
+        # SQL query returns all unique URLs that match the schedule_level as well as the last
+        # fetched_timestamp on record (i.e. the last time we tried to request this URL)
+        cursor = con.execute(
+            """
+            SELECT MAX(fetch.fetch_id), tracking.url, fetch.fetched_timestamp FROM tracking
+            JOIN fetch ON tracking.url=fetch.url
+            WHERE tracking.schedule_level=?
+            GROUP BY tracking.url
+            """, (level,)
+            )
         for row in cursor:
-            url = row[0]
-            fetch_cursor = con.execute(
-                "SELECT fetched_timestamp FROM fetch WHERE url=? ORDER BY fetch_id DESC LIMIT 1", (url,)
-                )
-            last_fetched_timestamp = datetime.fromisoformat(fetch_cursor.fetchone()[0])
+            _, url, last_fetched_timestamp = row
+            last_fetched_timestamp = datetime.fromisoformat(last_fetched_timestamp)
             time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
             print(time_since_fetch)
             print(wait_time)
@@ -632,6 +638,7 @@ def calculate_scheduled_urls():
     logger.debug(
         '\nSchedule for current run calculated - the following articles will be fetched...\n%s' +
         'Total: %s', schedule_results_str, len(all_urls))
+
 
     con.close()
 
@@ -799,11 +806,11 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    main_loop()
+    # main_loop()
     
     # debug_add_sample_tracking_data()
 
-    # calculate_scheduled_urls()
+    calculate_scheduled_urls()
 
     # testing_fetch_insert_not_changed()
 
