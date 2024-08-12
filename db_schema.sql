@@ -18,7 +18,9 @@ CREATE TABLE tracking (
 CREATE TABLE fetch (
   fetch_id INTEGER PRIMARY KEY,
   url TEXT,
+  schedule_level INTEGER,
   fetched_timestamp TEXT,
+  status TEXT,
   changed INTEGER, -- Boolean as INT
   article_id INTEGER,
   FOREIGN KEY(url) REFERENCES tracking(url),

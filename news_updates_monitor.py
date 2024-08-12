@@ -462,7 +462,6 @@ def main_loop():
 
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
-    con.row_factory = dict_factory
 
     # Update Tracking table to make sure all schedule_levels are up to date
     #
@@ -479,22 +478,38 @@ def main_loop():
     
     articles = urls_to_parsed_articles(urls=calculate_scheduled_urls(), delay=2)
 
+    check_articles(articles)
+
+    con.close()
+
+def check_articles(articles):
+    """ Takes a list of parsed article objects and checks them for:
+        1. New articles: if so they are stored
+        2. Existing articles that have changed: if so the new version is stored
+        Also updates the fetch table with relevant information
+    """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
+
     for article in articles:
+        # Get the article's schedule_level so we can log with the fetch data later
+        schedule_level = get_schedule_level(article.url)
+        status = '200'
+        # The highest article_ID that matches the URL contains the most recent changes we've stored
+        # (if it exists)
         cursor = con.execute(
             "SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1", (article.url,)
             )
-        # The highest article_ID that matches the URL contains the most recent changes we've stored
-        # (if it exists)
         row = cursor.fetchone()
         if row is None:
             # New article previously unseen
             article_id = article.store(con)
             # Log the fetch data
-            # Note that the logic of a first-time article is still to consider it 'changed'
-            bind = (article.url, article.fetched_timestamp, True, article_id)
+            bind = (article.url, schedule_level, article.fetched_timestamp, status, False, article_id)
             con.execute("""
-                INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
-                VALUES(?, ?, ?, ?)
+                INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed', 'article_id')
+                VALUES(?, ?, ?, ?, ?, ?)
                 """, bind)
             con.commit()
         else:
@@ -507,23 +522,44 @@ def main_loop():
 
             if article.is_copy(stored_article):
                 # No changes so just log the fetch data
-                bind = (article.url, article.fetched_timestamp, False)
+                bind = (article.url, schedule_level, article.fetched_timestamp, status, False)
                 con.execute(
-                    "INSERT INTO fetch('url', 'fetched_timestamp', 'changed') VALUES(?, ?, ?)", bind
+                    "INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed') VALUES(?, ?, ?, ?, ?)", bind
                     )
                 con.commit()
             else:
                 # This is a new version of an existing article, so should be stored
                 article_id = article.store(con)
                 # Log the fetch data
-                bind = (article.url, article.fetched_timestamp, True, article_id)
+                bind = (article.url, schedule_level, article.fetched_timestamp, status, True, article_id)
                 con.execute("""
-                    INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
-                    VALUES(?, ?, ?, ?)
+                    INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed', 'article_id')
+                    VALUES(?, ?, ?, ?, ?, ?)
                     """, bind)
                 con.commit()
 
     con.close()
+
+def testing_check_articles():
+    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
+    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
+    article.parse_all()
+    articles = [article]
+    check_articles(articles)
+
+
+
+def get_schedule_level(url):
+    """ Returns a given URL's current schedule_level from the Tracking table """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute('SELECT schedule_level FROM tracking WHERE url=?', (url,))
+    schedule_level = cursor.fetchone()
+    con.close()
+    if schedule_level is None:
+        return None
+    return schedule_level[0]
+
 
 def testing_getting_article_id():
     article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
@@ -806,12 +842,11 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    # main_loop()
+    main_loop()
+    # testing_check_articles()
     
     # debug_add_sample_tracking_data()
 
-    calculate_scheduled_urls()
+    # calculate_scheduled_urls()
 
-    # testing_fetch_insert_not_changed()
-
-    # testing_getting_article_id()
+    
