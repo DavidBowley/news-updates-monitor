@@ -493,9 +493,6 @@ def check_articles(articles):
     con.row_factory = dict_factory
 
     for article in articles:
-        # Get the article's schedule_level so we can log with the fetch data later
-        schedule_level = get_schedule_level(article.url)
-        status = '200'
         # The highest article_ID that matches the URL contains the most recent changes we've stored
         # (if it exists)
         cursor = con.execute(
@@ -505,11 +502,11 @@ def check_articles(articles):
         if row is None:
             # New article previously unseen
             article_id = article.store(con)
-            # Log the fetch data
-            bind = (article.url, schedule_level, article.fetched_timestamp, status, False, article_id)
+            bind = (False, article_id, article.fetched_timestamp)
             con.execute("""
-                INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed', 'article_id')
-                VALUES(?, ?, ?, ?, ?, ?)
+                UPDATE fetch
+                SET changed = ?, article_id = ?
+                WHERE fetched_timestamp = ?
                 """, bind)
             con.commit()
         else:
@@ -522,19 +519,21 @@ def check_articles(articles):
 
             if article.is_copy(stored_article):
                 # No changes so just log the fetch data
-                bind = (article.url, schedule_level, article.fetched_timestamp, status, False)
-                con.execute(
-                    "INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed') VALUES(?, ?, ?, ?, ?)", bind
-                    )
+                bind = (False, article.fetched_timestamp)
+                con.execute("""
+                    UPDATE fetch
+                    SET changed = ?
+                    WHERE fetched_timestamp = ?
+                    """, bind)
                 con.commit()
             else:
                 # This is a new version of an existing article, so should be stored
                 article_id = article.store(con)
-                # Log the fetch data
-                bind = (article.url, schedule_level, article.fetched_timestamp, status, True, article_id)
+                bind = (True, article_id, article.fetched_timestamp)
                 con.execute("""
-                    INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status', 'changed', 'article_id')
-                    VALUES(?, ?, ?, ?, ?, ?)
+                    UPDATE fetch
+                    SET changed = ?, article_id = ?
+                    WHERE fetched_timestamp = ?
                     """, bind)
                 con.commit()
 
@@ -783,8 +782,12 @@ def urls_to_parsed_articles(urls, delay):
     with BaseThrottler(name='base-throttler', delay=delay, session=s) as bt:
         throttled_requests = bt.multi_submit(reqs)
 
-    responses = []
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    res = []
+    
     for tr in throttled_requests:
+        fetched_timestamp = datetime.now(timezone.utc).isoformat()
         # First check for any exceptions
         if tr.exception is not None:
             logger.error(
@@ -793,6 +796,7 @@ def urls_to_parsed_articles(urls, delay):
                 'Exception Type:\n%s\n',
                 tr.request.url, tr.exception, type(tr.exception)
                 )
+            status = tr.exception.__class__.__name__
         # The 3rd party library doesn't raise exception for HTTPError so we check
         elif tr.response.status_code != 200:
             logger.error(
@@ -800,23 +804,36 @@ def urls_to_parsed_articles(urls, delay):
                 'HTTP Error - Status Code: %s\n',
                 tr.request.url, tr.response.status_code
                 )
+            status = str(tr.response.status_code)
         # Anything that gets to here is status code 200
         else:
-            responses.append(tr.response)
-
-    res = []
-    for response in responses:
-        response.encoding = 'utf-8'
-        article = Article(url=response.url)
-        article.raw_html = response.text
-        # Note: technically not when it is 'fetched' as that happens inside the threading of
-        # requests_throttler, so there could be up to a couple of minutes delay on this time
-        article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
-        article.parse_all()
-        res.append(article)
-
+            tr.response.encoding = 'utf-8'
+            article = Article(url=tr.response.url)
+            article.raw_html = tr.response.text
+            # Note: technically not when it is 'fetched' as that happens inside the threading of
+            # requests_throttler, so there could be up to a couple of minutes delay on this time
+            # NOTE: the above may no longer be true!
+            article.fetched_timestamp = fetched_timestamp
+            article.parse_all()
+            res.append(article)
+            status = '200'
+        
+        schedule_level = get_schedule_level(tr.request.url)
+        bind = (tr.request.url, schedule_level, fetched_timestamp, status)
+        con.execute("""
+            INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status')
+            VALUES(?, ?, ?, ?)
+            """, bind)
+        con.commit()
+    
+    con.close()
     return res
 
+def testing_new_fetch_insert():
+    """ Test function """
+    url_list = ['http://www.sdfjldsjfldsjflkadshghafdlgjfdsalkgjladsfjgldsfj.com']
+    articles = urls_to_parsed_articles(url_list, delay=2)
+    # articles[0].debug_log_print()
 
 if __name__ == '__main__':
 
@@ -848,5 +865,8 @@ if __name__ == '__main__':
     # debug_add_sample_tracking_data()
 
     # calculate_scheduled_urls()
+
+    # testing_new_fetch_insert()
+
 
     
