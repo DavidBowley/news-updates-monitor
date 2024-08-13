@@ -845,7 +845,7 @@ def isOnline():
         response = requests.get('https://www.bbc.co.uk', timeout=10)
         return True
     except requests.exceptions.ConnectionError as e:
-        logger.error(
+        logger.debug(
             'No response from https://www.bbc.co.uk - ' +
             'the internet connection is likely down\n' +
             'Exception __str__:\n%s\n' +
@@ -853,6 +853,29 @@ def isOnline():
             e, type(e)
             )
         return False
+
+def testing_looping():
+    """ Testing running the main_loop() every 15 minutes """
+    # interval = 60*15
+    interval = 10 # for debugging - will remove later
+    while True:
+        logger.info('Waking up from sleep...')
+        time.sleep(3)
+        if isOnline():
+            # call main_loop()
+            logger.info('Simulating calling main_loop()')
+            time.sleep(3)
+        else:
+            logger.error('No internet connection detected, skipping this loop')
+        logger.info('Going to sleep for %s seconds', interval)
+        time.sleep(interval)
+
+
+
+            
+
+
+
 
 if __name__ == '__main__':
 
@@ -870,7 +893,7 @@ if __name__ == '__main__':
 
     # Create a stream handler to print logs to the console
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
     # Add the handlers to the logger
@@ -887,9 +910,6 @@ if __name__ == '__main__':
 
     # testing_new_fetch_insert()
 
-    if isOnline():
-        # logic for repeatedly callig main_loop() here
-        # main_loop()
-        pass
+    testing_looping()
 
     
