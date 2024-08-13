@@ -835,6 +835,25 @@ def testing_new_fetch_insert():
     articles = urls_to_parsed_articles(url_list, delay=2)
     # articles[0].debug_log_print()
 
+def isOnline():
+    """ Boolean function that checks whether the internet is connected 
+        Checks against https://www.bbc.co.uk
+        This covers both if they are down or if my connection is down, as either way
+        we will get an exception raised here
+    """
+    try:
+        response = requests.get('https://www.bbc.co.uk', timeout=10)
+        return True
+    except requests.exceptions.ConnectionError as e:
+        logger.error(
+            'No response from https://www.bbc.co.uk - ' +
+            'the internet connection is likely down\n' +
+            'Exception __str__:\n%s\n' +
+            'Exception Type:\n%s\n',
+            e, type(e)
+            )
+        return False
+
 if __name__ == '__main__':
 
     # Create a logger
@@ -859,7 +878,7 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    main_loop()
+    # main_loop()
     # testing_check_articles()
     
     # debug_add_sample_tracking_data()
@@ -868,5 +887,9 @@ if __name__ == '__main__':
 
     # testing_new_fetch_insert()
 
+    if isOnline():
+        # logic for repeatedly callig main_loop() here
+        # main_loop()
+        pass
 
     
