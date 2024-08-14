@@ -437,34 +437,37 @@ def table_row_to_article(row):
     return stored_article
 
 def main_loop():
-    """ ***Work-in-progress***
-        This will eventually be the function that repeats at set intervals in order to check for 
-        new or updated news articles, store them, note changes, etc.
+    """ Checks the BBC News homepage for new articles, as well as checks existing articles in the
+        database for updates. Uses a scheduling system so that articles are only checked at certain
+        times depending on how old they are.        
     """
+    # Update Tracking table to make sure all schedule_levels are up to date
+    update_schedule_levels()
+    # Find new news articles that we haven't yet seen and add them to the Tracking table
+    new_news_to_tracking()
+    # Decide which URLs will be fetched this loop based on their schedule_level
+    scheduled_urls = calculate_scheduled_urls()
+    # Fetch the URLs and convert to parsed article objects (i.e. article snapshots)
+    articles = urls_to_parsed_articles(urls=scheduled_urls, delay=2)
+    # Process article objects: store new and updated articles in database
+    check_articles(articles)
 
+def new_news_to_tracking():
+    """ Identifies any new news articles that haven't been seen by the system yet
+        and adds them to the Tracking table
+    """
+    logger.info('Finding new news articles...')
+    time.sleep(2)
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
-
-    # Update Tracking table to make sure all schedule_levels are up to date
-    #
-    # Need to add logic for when we have real articles in...
-    # Need to add logic for the rare case when no fetch has taken place (e.g. connection issues)
-
-    update_schedule_levels()
-
-    # Find new news articles that we haven't yet seen and add them to the Tracking table
     new_urls = find_new_news()
     for url in new_urls:
         # New URLs always start on schedule_level 1
         con.execute("INSERT INTO tracking VALUES(?, 1)", (url,))
         con.commit()
-    logger.debug('Added %s new URLs into the tracking table', len(new_urls))
-    
-    articles = urls_to_parsed_articles(urls=calculate_scheduled_urls(), delay=2)
-
-    check_articles(articles)
-
+    logger.info('Added %s new URLs into the Tracking table', len(new_urls))
     con.close()
+
 
 def update_schedule_levels():
     """ Checks all existing articles from the Tracking table to make sure that their tracking 
@@ -475,10 +478,11 @@ def update_schedule_levels():
         Level 4 = over 48 hours to 1 week
         Level 5 = over 1 week to 4 weeks
         Level 6 = over 4 weeks
-        The first fetched_timestamp on record per URL is the baseline to work out its age
-        Level 6's can be ignored because there's no higher level to move them to
+        The duration for each level is up to AND including the timeframe, but greater than the
+        previous level's timeframe - the next level starts 1 second after the previous timeframe.
+        The first fetched_timestamp on record per URL is the baseline to work out its age.
+        Level 6's can be ignored because there's no higher level to move them to.
     """
-    # under the specified time = the schedule_level
     schedule_level_duration = {
     1: timedelta(hours=3),
     2: timedelta(hours=24),
@@ -488,11 +492,6 @@ def update_schedule_levels():
     }
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
-
-    # get all Level 1 URLs as well as their first fetched_timestamp in order to work out their age
-    # can probably do this one SQL statement
-    # see how it handles URLs that don't have a fetch row (e.g. they had connection issues on first run)
-
     cursor = con.execute(
             """
             SELECT tracking.url, tracking.schedule_level,
@@ -503,7 +502,10 @@ def update_schedule_levels():
             GROUP BY tracking.url
             """
             )
+    logger.info('Updating Tracking table schedule_levels for existing articles...')
+    time.sleep(2)
     rows = cursor.fetchall()
+    counter = 0
     for row in rows:
         url, current_schedule_level, first_fetched_timestamp, _ = row
         first_fetched_timestamp = datetime.fromisoformat(first_fetched_timestamp)
@@ -531,6 +533,7 @@ def update_schedule_levels():
                 SET schedule_level = ?
                 WHERE url = ?
                 """, bind)
+            counter += 1
         logger.debug(
             '%s \tcurrent_schedule_level: %s\tnew_schedule_level %s',
             url, current_schedule_level, new_schedule_level
@@ -538,8 +541,9 @@ def update_schedule_levels():
     
     # Commiting once we've got through the whole list without any errors
     con.commit()
-
     con.close()
+    logger.info('%s schedule_levels updated out of a total %s URLs checked', counter, len(rows))
+
 
 def testing_schedule_duration_logic():
     """ Test function """
@@ -575,10 +579,14 @@ def check_articles(articles):
         2. Existing articles that have changed: if so the new version is stored
         Also updates the fetch table with relevant information
     """
+    logger.info('Checking fetched article snapshots for new and updated articles...')
+    time.sleep(2)
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
 
+    c_new = 0
+    c_updated = 0
     for article in articles:
         # The highest article_ID that matches the URL contains the most recent changes we've stored
         # (if it exists)
@@ -596,6 +604,7 @@ def check_articles(articles):
                 WHERE fetched_timestamp = ?
                 """, bind)
             con.commit()
+            c_new += 1
         else:
             stored_article = table_row_to_article(row)
             logger.debug(
@@ -623,8 +632,10 @@ def check_articles(articles):
                     WHERE fetched_timestamp = ?
                     """, bind)
                 con.commit()
-
+                c_updated +=1
     con.close()
+    c_total = c_new + c_updated
+    logger.info('Stored a total of %s article snapshots (%s new and %s updated articles)', c_total, c_new, c_updated)
 
 def testing_check_articles():
     article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
@@ -707,6 +718,8 @@ def calculate_scheduled_urls():
         Level 6: every month
         
      """
+    logger.info('Calculating which URLs to fetch based on schedule_level...')
+    time.sleep(2)
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     
@@ -756,14 +769,9 @@ def calculate_scheduled_urls():
     
     schedule_results_str = ''
     for level, res in schedule_results.items():
-        schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + '\n'
-    logger.debug(
-        '\nSchedule for current run calculated - the following articles will be fetched...\n%s' +
-        'Total: %s', schedule_results_str, len(all_urls))
-
-
+        schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + ', '
+    logger.info('%s' + 'Total URLs to fetch: %s', schedule_results_str, len(all_urls))
     con.close()
-
     return all_urls
 
 def find_new_news():
@@ -954,14 +962,8 @@ def testing_looping():
             time.sleep(3)
         else:
             logger.error('No internet connection detected, skipping this loop')
-        logger.info('Going to sleep for %s seconds', interval)
+        logger.info('Going to sleep for %s seconds...', interval)
         time.sleep(interval)
-
-
-
-            
-
-
 
 
 if __name__ == '__main__':
@@ -980,7 +982,7 @@ if __name__ == '__main__':
 
     # Create a stream handler to print logs to the console
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
     # Add the handlers to the logger
@@ -988,7 +990,7 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    # main_loop()
+    main_loop()
     # testing_check_articles()
     
     # debug_add_sample_tracking_data()
@@ -997,7 +999,7 @@ if __name__ == '__main__':
 
     # testing_new_fetch_insert()
 
-    update_schedule_levels()
+    # update_schedule_levels()
 
     # testing_schedule_duration_logic()
 
