@@ -442,24 +442,6 @@ def main_loop():
         new or updated news articles, store them, note changes, etc.
     """
 
-    # Likely will be called from __main__ at set intervals to keep checking for articles
-
-    # In case I don't want to use a live article
-    # articles = []
-    # article = debug_file_to_article_object(url='https://www.bbc.co.uk/news/articles/cw00rgq24xvo',
-    #           filename='test_file_edited.html')
-    # article.parse_all()
-    # articles.append(article)
-
-    # DEBUG: database/tables currently already created - will need to add logic for if it doesn't
-    # exist, including creating the database schema
-    
-
-    # Fully parsed Article objects of the latest news from the homepage
-    # articles = get_latest_news()
-    # Fully parsed Article objects of the live versions of the existing article database
-    # articles = get_updated_news()
-
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
 
@@ -467,6 +449,8 @@ def main_loop():
     #
     # Need to add logic for when we have real articles in...
     # Need to add logic for the rare case when no fetch has taken place (e.g. connection issues)
+
+    update_schedule_levels()
 
     # Find new news articles that we haven't yet seen and add them to the Tracking table
     new_urls = find_new_news()
@@ -481,6 +465,109 @@ def main_loop():
     check_articles(articles)
 
     con.close()
+
+def update_schedule_levels():
+    """ Checks all existing articles from the Tracking table to make sure that their tracking 
+        schedule_levels are up-to-date, using the following logic:
+        Level 1 = first 3 hours
+        Level 2 = over 3 hours to 24 hours
+        Level 3 = over 24 to 48 hours
+        Level 4 = over 48 hours to 1 week
+        Level 5 = over 1 week to 4 weeks
+        Level 6 = over 4 weeks
+        The first fetched_timestamp on record per URL is the baseline to work out its age
+        Level 6's can be ignored because there's no higher level to move them to
+    """
+    # under the specified time = the schedule_level
+    schedule_level_duration = {
+    1: timedelta(hours=3),
+    2: timedelta(hours=24),
+    3: timedelta(hours=48),
+    4: timedelta(weeks=1),
+    5: timedelta(weeks=4),
+    }
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+
+    # get all Level 1 URLs as well as their first fetched_timestamp in order to work out their age
+    # can probably do this one SQL statement
+    # see how it handles URLs that don't have a fetch row (e.g. they had connection issues on first run)
+
+    cursor = con.execute(
+            """
+            SELECT tracking.url, tracking.schedule_level,
+                   fetch.fetched_timestamp, MIN(fetch.fetch_id)
+            FROM tracking
+            JOIN fetch ON tracking.url=fetch.url
+            WHERE tracking.schedule_level BETWEEN 1 and 5
+            GROUP BY tracking.url
+            """
+            )
+    rows = cursor.fetchall()
+    for row in rows:
+        url, current_schedule_level, first_fetched_timestamp, _ = row
+        first_fetched_timestamp = datetime.fromisoformat(first_fetched_timestamp)
+        time_since_fetch = datetime.now(timezone.utc) - first_fetched_timestamp
+
+        if time_since_fetch > schedule_level_duration[5]:
+            new_schedule_level = 6
+        elif schedule_level_duration[4] < time_since_fetch <= schedule_level_duration[5]:
+            new_schedule_level = 5
+        elif schedule_level_duration[3] < time_since_fetch <= schedule_level_duration[4]:
+            new_schedule_level = 4
+        elif schedule_level_duration[2] < time_since_fetch <= schedule_level_duration[3]:
+            new_schedule_level = 3
+        elif schedule_level_duration[1] < time_since_fetch <= schedule_level_duration[2]:
+            new_schedule_level = 2
+        elif time_since_fetch <= schedule_level_duration[1]:
+            new_schedule_level = 1
+
+        if new_schedule_level != current_schedule_level:
+            # The new level is different to the existing one in DB, so we can update it
+            bind = (new_schedule_level, url)
+            con.execute(
+                """
+                UPDATE tracking
+                SET schedule_level = ?
+                WHERE url = ?
+                """, bind)
+        logger.debug(
+            '%s \tcurrent_schedule_level: %s\tnew_schedule_level %s',
+            url, current_schedule_level, new_schedule_level
+            )
+    
+    # Commiting once we've got through the whole list without any errors
+    con.commit()
+
+    con.close()
+
+def testing_schedule_duration_logic():
+    """ Test function """
+    schedule_level_duration = {
+    1: timedelta(hours=3),
+    2: timedelta(hours=24),
+    3: timedelta(hours=48),
+    4: timedelta(weeks=1),
+    5: timedelta(weeks=4),
+    }
+
+    time_since_fetch = timedelta(seconds=5)
+    url = 'DEBBUG URL'
+
+
+    if time_since_fetch > schedule_level_duration[5]:
+        print(url, 'is schedule_level 6')
+    elif schedule_level_duration[4] < time_since_fetch <= schedule_level_duration[5]:
+        print(url, 'is schedule_level 5')
+    elif schedule_level_duration[3] < time_since_fetch <= schedule_level_duration[4]:
+        print(url, 'is schedule_level 4')
+    elif schedule_level_duration[2] < time_since_fetch <= schedule_level_duration[3]:
+        print(url, 'is schedule_level 3')
+    elif schedule_level_duration[1] < time_since_fetch <= schedule_level_duration[2]:
+        print(url, 'is schedule_level 2')
+    elif time_since_fetch <= schedule_level_duration[1]:
+        print(url, 'is schedule_level 1')
+
 
 def check_articles(articles):
     """ Takes a list of parsed article objects and checks them for:
@@ -660,8 +747,8 @@ def calculate_scheduled_urls():
             _, url, last_fetched_timestamp = row
             last_fetched_timestamp = datetime.fromisoformat(last_fetched_timestamp)
             time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
-            print(time_since_fetch)
-            print(wait_time)
+            # print(time_since_fetch)
+            # print(wait_time)
             if time_since_fetch >= wait_time:
                 urls.append(url)
         schedule_results[level] = len(urls)
@@ -893,7 +980,7 @@ if __name__ == '__main__':
 
     # Create a stream handler to print logs to the console
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
 
     # Add the handlers to the logger
@@ -910,6 +997,8 @@ if __name__ == '__main__':
 
     # testing_new_fetch_insert()
 
-    testing_looping()
+    update_schedule_levels()
+
+    # testing_schedule_duration_logic()
 
     
