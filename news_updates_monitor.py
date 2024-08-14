@@ -10,20 +10,15 @@ import pprint # pylint: disable=unused-import
 import logging
 import time
 from datetime import datetime, timezone, timedelta
-import shelve
 import sqlite3
 import difflib
+import typing
 
 import requests
 from requests.adapters import HTTPAdapter
 import bs4
+# Note: this is my fork of requests_throttler (see requirements.txt)
 from requests_throttler import BaseThrottler
-# Note: currently using my forked version of requests_throttler which removes the extra log handler
-# added. The original PyPI can be used but there will be doubled log entries and reduced formatting
-# ability.
-# PR submitted: https://github.com/se7entyse7en/requests-throttler/pull/19 but my fork can be used
-# until it's fixed:
-# pip install git+https://github.com/DavidBowley/requests-throttler.git@remove_log_handlers
 
 
 class Article():
@@ -242,156 +237,6 @@ class TimeoutHTTPAdapter(HTTPAdapter):
         return super().send(request, **kwargs)
 
 
-###
-### Start of Testing / Debug functions
-###
-
-def testing_exceptions():
-    """ Test function to make sure Timeout, Connection and other exceptions
-        are working via requests_throttler
-    """
-    urls = [
-    'https://github.com/kennethreitz/requests/issues/1236',
-    'https://www.github.com',
-    'http://fjfklsfjksjdoijfkjsldf.com/',
-    'https://www.yahoo.co.uk',
-    ]
-    articles = urls_to_parsed_articles(urls, delay=5)
-    for article in articles:
-        article.debug_log_print()
-
-def debug_file_to_article_object(url, filename):
-    """ Debugging function: turn an offline file into an article object for testing purposes
-        instead of fetching a live URL
-        Pulls the HTML into the self.raw_html attribute
-    """
-    debug_article = Article(url=url)
-    with open(filename, encoding='utf-8') as my_file:
-        debug_article.raw_html = my_file.read()
-    return debug_article
-
-def debug_table(attrs, parsed):
-    """ Builds a data table inside a HTML file with all the information from the article objects we
-        want to see.
-        Currently pulls from template files in /debug_table/ (which is not part of the Git repo)
-        but only using it for debugging so far.
-        attrs = list of strings; must only include known Article object attributes (but NOT parsed)
-        parsed = dictionary keys as per article.parsed[...] to specify specific parsed info
-        The ID will always be output as the first column regardless of other details requested
-    """
-    # pylint: disable=too-many-locals
-    # Agree with pylint that this function is too complex, however it's purely for internal
-    # debugging and won't be in the final version in this form. If I do decide to reuse parts of
-    # this (e.g. to make a dashboard) then I will definitely simplify it and remove some of the
-    # variables.
-    with open('debug_table/top.html', encoding='utf-8') as f:
-        template_start = f.read()
-    with open('debug_table/bottom.html', encoding='utf-8') as f:
-        template_end = f.read()
-    data_table_start = ''
-    start_indent = 4
-    data_table_start += (
-        indent(start_indent) + '<table>\n' +
-        indent(start_indent + 2) + '<caption>' + 'Debug Table' + '</caption>\n'
-        )
-    data_table_start += indent(start_indent+2) + '<tr>\n'
-    data_table_start += indent(start_indent+4) + '<th>' + 'ID' + '</th>\n'
-    data_table_start += indent(start_indent+4) + '<th>' + 'Snapshot' + '</th>\n'
-    for th in attrs:
-        data_table_start += indent(start_indent+4) + '<th>' + th + '</th>\n'
-    for th in parsed:
-        data_table_start += indent(start_indent+4) + '<th>' + th + '</th>\n'
-    data_table_start += indent(start_indent+2) + '</tr>'
-    # Overwrite existing HTML file if it exists
-    with open('debug_table/debug_table.html', 'w', encoding='utf-8') as f:
-        f.write(template_start)
-        f.write('\n\n' + data_table_start + '\n\n')
-    # Start outputing the data rows
-    with shelve.open('db/articles_db') as db:
-        ids = list(db.keys())
-        ids.sort(key=int)
-        for _id in ids:
-            article_list = db[_id]
-            n = 0
-            for article in article_list:
-                article_dict = article.__dict__
-                data_row = ''
-                data_row += indent(start_indent+2) + '<tr>\n'
-                data_row += indent(start_indent+4) + '<td>' + _id + '</td>\n'
-                data_row += indent(start_indent+4) + '<td>' + str(n) + '</td>\n'
-                for attr in  attrs:
-                    data_row += (
-                        indent(start_indent+4) + '<td>' + str(article_dict[attr]) + '</td>\n'
-                        )
-                for item in parsed:
-                    data_row += (
-                        indent(start_indent+4) + '<td>' + str(article.parsed[item]) + '</td>\n'
-                        )
-                data_row += indent(start_indent+2) + '</tr>'
-                # Append to existing HTML file
-                with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
-                    f.write(data_row + '\n\n')
-                n += 1
-        data_table_end = indent(start_indent) + '</table>'
-        # End the table and finalise file template - append to existing HTML file
-        with open('debug_table/debug_table.html', 'a', encoding='utf-8') as f:
-            f.write(data_table_end + '\n\n')
-            f.write(template_end)
-
-def indent(spaces):
-    """ Returns a string matching the number of spaces needed for the indent
-        spaces = integer
-    """
-    return ' ' * spaces
-
-def test_main_loop_storage():
-    """ Test function """
-    with shelve.open('db/url_id_mapping_db') as db:
-        for key, val in db.items():
-            print('URL:', key, 'ID:', val)
-
-    debug_table(attrs = ['url'], parsed=['parse_errors', 'headline'])
-
-def testing_comparison():
-    """ Proof of concept for showing visual differences in article objects """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.row_factory = dict_factory
-    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
-    article_a = table_row_to_article(cursor.fetchone())
-    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
-    article_b = table_row_to_article(cursor.fetchone())
-
-    con.close()
-
-    text1 = article_a.parsed['body'].splitlines()
-    text2 = article_b.parsed['body'].splitlines()
-
-    with open('diff_html/template_top.html', encoding='utf-8') as f:
-        template_start = f.read()
-    with open('diff_html/template_bottom.html', encoding='utf-8') as f:
-        template_end = f.read()
-
-    d = difflib.HtmlDiff(wrapcolumn=75)
-    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
-
-    with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
-        f.write(template_start)
-        f.write(diff_table)
-        f.write(template_end)
-
-def testing_foreign_keys_constraint():
-    """ Testing foreign keys constraint """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.execute('INSERT INTO fetch(url) VALUES(12345)')
-    con.commit()
-    con.close()
-
-###
-### End of Testing / Debug functions
-###
-
 def dict_factory(cursor, row):
     """ Factory used with SQLite3.Connection.row_factory
         Produces a dict with column names as keys instead of the default tuple of values
@@ -452,23 +297,6 @@ def main_loop():
     # Process article objects: store new and updated articles in database
     check_articles(articles)
 
-def new_news_to_tracking():
-    """ Identifies any new news articles that haven't been seen by the system yet
-        and adds them to the Tracking table
-    """
-    logger.info('Finding new news articles...')
-    time.sleep(2)
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    new_urls = find_new_news()
-    for url in new_urls:
-        # New URLs always start on schedule_level 1
-        con.execute("INSERT INTO tracking VALUES(?, 1)", (url,))
-        con.commit()
-    logger.info('Added %s new URLs into the Tracking table', len(new_urls))
-    con.close()
-
-
 def update_schedule_levels():
     """ Checks all existing articles from the Tracking table to make sure that their tracking 
         schedule_levels are up-to-date, using the following logic:
@@ -523,6 +351,8 @@ def update_schedule_levels():
             new_schedule_level = 2
         elif time_since_fetch <= schedule_level_duration[1]:
             new_schedule_level = 1
+        else:
+            typing.assert_never(time_since_fetch)
 
         if new_schedule_level != current_schedule_level:
             # The new level is different to the existing one in DB, so we can update it
@@ -538,40 +368,209 @@ def update_schedule_levels():
             '%s \tcurrent_schedule_level: %s\tnew_schedule_level %s',
             url, current_schedule_level, new_schedule_level
             )
-    
-    # Commiting once we've got through the whole list without any errors
     con.commit()
     con.close()
     logger.info('%s schedule_levels updated out of a total %s URLs checked', counter, len(rows))
 
+def new_news_to_tracking():
+    """ Identifies any new news articles that haven't been seen by the system yet
+        and adds them to the Tracking table
+    """
+    logger.info('Finding new news articles...')
+    time.sleep(2)
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    new_urls = find_new_news()
+    for url in new_urls:
+        # New URLs always start on schedule_level 1
+        con.execute("INSERT INTO tracking VALUES(?, 1)", (url,))
+        con.commit()
+    logger.info('Added %s new URLs into the Tracking table', len(new_urls))
+    con.close()
 
-def testing_schedule_duration_logic():
-    """ Test function """
-    schedule_level_duration = {
-    1: timedelta(hours=3),
-    2: timedelta(hours=24),
-    3: timedelta(hours=48),
-    4: timedelta(weeks=1),
-    5: timedelta(weeks=4),
+def find_new_news():
+    """ Parses BBC homepage for all news articles and checks if they are new to our system
+        Returns a list of URLs that should be added to our system
+    """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    latest_news_urls = get_news_urls()
+    cursor = con.execute("SELECT url FROM tracking")
+    stored_urls = [row[0] for row in cursor]
+    online_urls_not_in_storage = list(set(latest_news_urls) - set(stored_urls))
+    con.close()
+    return online_urls_not_in_storage
+
+def get_news_urls(debug=None):
+    """ Extracts all the news article URLs from the BBC Homepage
+        Returns a list of URL strings
+        debug = integer; flag to reduce the number returned for testing purposes
+    """
+    news_homepage = 'https://www.bbc.co.uk/news'
+    news_homepage_html = request_html(news_homepage)
+    # In the event of connection issues we don't want to carry on with the function
+    if news_homepage_html is None:
+        return None
+    soup = bs4.BeautifulSoup(request_html(news_homepage), 'lxml')
+    news_urls = []
+    for link in soup.find_all('a'):
+        href = link.get('href')
+        # href attribute exists on the <a> AND contains '/news/articles/'
+        # AND is not the '#comments' version of the link
+        if href is not None and href.find('/news/articles/') != -1 and href.find('comments') == -1:
+            news_urls.append('https://www.bbc.co.uk' + href)
+    # Remove duplicate URLs
+    news_urls = list(set(news_urls))
+    if debug is not None:
+        return news_urls[:debug]
+    return news_urls
+
+def calculate_scheduled_urls():
+    """ Works out which URLs from the Tracking table should be fetched. The schedule is as follows:
+        Level 1: every 15 minutes
+        Level 2: every hour
+        Level 3: 3 times a day (every 8 hours)
+        Level 4: every day
+        Level 5: every week
+        Level 6: every month
+     """
+    logger.info('Calculating which URLs to fetch based on schedule_level...')
+    time.sleep(2)
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+
+    all_urls = []
+    schedule_results = {}
+
+    # Levels 1's
+    # No need to set a schedule assuming the main_loop fires every 15 minutes
+    # as this is the interval we want anyway
+    cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=1')
+    level_1_urls = [row[0] for row in cursor]
+    all_urls.extend(level_1_urls)
+    schedule_results[1] = len(level_1_urls)
+
+    # Setup schedule levels
+    schedule_level = {
+    2: timedelta(hours=1),
+    3: timedelta(hours=8),
+    4: timedelta(days=1),
+    5: timedelta(weeks=1),
+    6: timedelta(weeks=4)
     }
 
-    time_since_fetch = timedelta(seconds=5)
-    url = 'DEBBUG URL'
+    # Levels 2 through 6 are only fetched if the required amount of wait_time has elapsed
+    for level, wait_time in schedule_level.items():
+        urls = []
+        # SQL query returns all unique URLs that match the schedule_level as well as the last
+        # fetched_timestamp on record (i.e. the last time we tried to request this URL)
+        cursor = con.execute(
+            """
+            SELECT MAX(fetch.fetch_id), tracking.url, fetch.fetched_timestamp FROM tracking
+            JOIN fetch ON tracking.url=fetch.url
+            WHERE tracking.schedule_level=?
+            GROUP BY tracking.url
+            """, (level,)
+            )
+        for row in cursor:
+            _, url, last_fetched_timestamp = row
+            last_fetched_timestamp = datetime.fromisoformat(last_fetched_timestamp)
+            time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
+            if time_since_fetch >= wait_time:
+                urls.append(url)
+        schedule_results[level] = len(urls)
+        all_urls.extend(urls)
 
+    schedule_results_str = ''
+    for level, res in schedule_results.items():
+        schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + ', '
+    logger.info('%s' + 'Total URLs to fetch: %s', schedule_results_str, len(all_urls))
+    con.close()
+    return all_urls
 
-    if time_since_fetch > schedule_level_duration[5]:
-        print(url, 'is schedule_level 6')
-    elif schedule_level_duration[4] < time_since_fetch <= schedule_level_duration[5]:
-        print(url, 'is schedule_level 5')
-    elif schedule_level_duration[3] < time_since_fetch <= schedule_level_duration[4]:
-        print(url, 'is schedule_level 4')
-    elif schedule_level_duration[2] < time_since_fetch <= schedule_level_duration[3]:
-        print(url, 'is schedule_level 3')
-    elif schedule_level_duration[1] < time_since_fetch <= schedule_level_duration[2]:
-        print(url, 'is schedule_level 2')
-    elif time_since_fetch <= schedule_level_duration[1]:
-        print(url, 'is schedule_level 1')
+def urls_to_parsed_articles(urls, delay):
+    """ Takes a list of URLs and returns a list of Article objects 
+        with raw_html attribute value fetched via the requests_throttler
+        The returned objects should be parsed Article objects ready to store/compare
+        urls = list of strings
+        delay = float; seconds to use for requests throttling
+    """
+    # pylint: disable=too-many-locals
+    #         it was 16/15 - it could be refactored but a lot of effort for the sake of 1 variable
 
+    # List of request objects to send to the throttler
+    reqs = []
+    for url in urls:
+        request = requests.Request(method='GET', url=url)
+        reqs.append(request)
+
+    # Create a custom session to pass to requests_throttler to configure global timeout
+    s = requests.Session()
+    s.mount('http://', TimeoutHTTPAdapter(timeout=10))
+    s.mount('https://', TimeoutHTTPAdapter(timeout=10))
+
+    # Throttler queues all the requests and processes them slowly
+    # This step can take a while depending on the delay and number of URLs
+    with BaseThrottler(name='base-throttler', delay=delay, session=s) as bt:
+        throttled_requests = bt.multi_submit(reqs)
+
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    res = []
+
+    for tr in throttled_requests:
+        fetched_timestamp = datetime.now(timezone.utc).isoformat()
+        # First check for any exceptions
+        if tr.exception is not None:
+            logger.error(
+                'Request Error: URL: %s\n' +
+                'Exception __str__:\n%s\n' +
+                'Exception Type:\n%s\n',
+                tr.request.url, tr.exception, type(tr.exception)
+                )
+            status = tr.exception.__class__.__name__
+        # The 3rd party library doesn't raise exception for HTTPError so we check
+        elif tr.response.status_code != 200:
+            logger.error(
+                'Request Error: URL: %s\n' +
+                'HTTP Error - Status Code: %s\n',
+                tr.request.url, tr.response.status_code
+                )
+            status = str(tr.response.status_code)
+        # Anything that gets to here is status code 200
+        else:
+            tr.response.encoding = 'utf-8'
+            article = Article(url=tr.response.url)
+            article.raw_html = tr.response.text
+            # Note: technically not when it is 'fetched' as that happens inside the threading of
+            # requests_throttler, so there could be up to a couple of minutes delay on this time
+            # NOTE: the above may no longer be true!
+            article.fetched_timestamp = fetched_timestamp
+            article.parse_all()
+            res.append(article)
+            status = '200'
+
+        schedule_level = get_schedule_level(tr.request.url)
+        bind = (tr.request.url, schedule_level, fetched_timestamp, status)
+        con.execute("""
+            INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status')
+            VALUES(?, ?, ?, ?)
+            """, bind)
+        con.commit()
+
+    con.close()
+    return res
+
+def get_schedule_level(url):
+    """ Returns a given URL's current schedule_level from the Tracking table """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute('SELECT schedule_level FROM tracking WHERE url=?', (url,))
+    schedule_level = cursor.fetchone()
+    con.close()
+    if schedule_level is None:
+        return None
+    return schedule_level[0]
 
 def check_articles(articles):
     """ Takes a list of parsed article objects and checks them for:
@@ -635,309 +634,19 @@ def check_articles(articles):
                 c_updated +=1
     con.close()
     c_total = c_new + c_updated
-    logger.info('Stored a total of %s article snapshots (%s new and %s updated articles)', c_total, c_new, c_updated)
-
-def testing_check_articles():
-    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
-    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
-    article.parse_all()
-    articles = [article]
-    check_articles(articles)
-
-
-
-def get_schedule_level(url):
-    """ Returns a given URL's current schedule_level from the Tracking table """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    cursor = con.execute('SELECT schedule_level FROM tracking WHERE url=?', (url,))
-    schedule_level = cursor.fetchone()
-    con.close()
-    if schedule_level is None:
-        return None
-    return schedule_level[0]
-
-
-def testing_getting_article_id():
-    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
-    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
-    article.parse_all()
-
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    con.row_factory = dict_factory
-
-    article_id = article.store(con)
-    print(article_id)
-
-
-def testing_fetch_insert_changed():
-    """ Test function - for if article has changed """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-
-    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
-    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
-    article.parse_all()
-
-    bind = (article.url, article.fetched_timestamp, True, 1)
-
-    con.execute("""
-        INSERT INTO fetch('url', 'fetched_timestamp', 'changed', 'article_id')
-        VALUES(?, ?, ?, ?)
-        """, bind)
-    con.commit()
-
-    con.close() 
-
-def testing_fetch_insert_not_changed():
-    """ Test function - for if article has NOT changed """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-
-    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/test_level_1____0', 'test_files/test_file.html')
-    article.fetched_timestamp = datetime.now(timezone.utc).isoformat()
-    article.parse_all()
-
-    bind = (article.url, article.fetched_timestamp, False)
-
-    con.execute(
-        "INSERT INTO fetch('url', 'fetched_timestamp', 'changed') VALUES(?, ?, ?)", bind
+    logger.info(
+        'Stored a total of %s article snapshots (%s new and %s updated articles)',
+        c_total, c_new, c_updated
         )
-    con.commit()
 
-    con.close() 
-
-def calculate_scheduled_urls():
-    """ Works out which URLs from the Tracking table should be fetched. The schedule is as follows:
-        Level 1: every 15 minutes
-        Level 2: every hour
-        Level 3: 3 times a day (every 8 hours)
-        Level 4: every day
-        Level 5: every week
-        Level 6: every month
-        
-     """
-    logger.info('Calculating which URLs to fetch based on schedule_level...')
-    time.sleep(2)
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    
-    all_urls = []
-    schedule_results = {}
-
-    # Levels 1's
-    # No need to set a schedule assuming the main_loop fires every 15 minutes
-    # as this is the interval we want anyway
-    cursor = con.execute('SELECT url FROM tracking WHERE schedule_level=1')
-    level_1_urls = [row[0] for row in cursor]
-    all_urls.extend(level_1_urls)
-    schedule_results[1] = len(level_1_urls)
-
-    # Setup schedule levels
-    schedule_level = {
-    2: timedelta(hours=1),
-    3: timedelta(hours=8),
-    4: timedelta(days=1),
-    5: timedelta(weeks=1),
-    6: timedelta(weeks=4)
-    }
-
-    # Levels 2 through 6 are only fetched if the required amount of wait_time has elapsed
-    for level, wait_time in schedule_level.items():
-        urls = []
-        # SQL query returns all unique URLs that match the schedule_level as well as the last
-        # fetched_timestamp on record (i.e. the last time we tried to request this URL)
-        cursor = con.execute(
-            """
-            SELECT MAX(fetch.fetch_id), tracking.url, fetch.fetched_timestamp FROM tracking
-            JOIN fetch ON tracking.url=fetch.url
-            WHERE tracking.schedule_level=?
-            GROUP BY tracking.url
-            """, (level,)
-            )
-        for row in cursor:
-            _, url, last_fetched_timestamp = row
-            last_fetched_timestamp = datetime.fromisoformat(last_fetched_timestamp)
-            time_since_fetch = datetime.now(timezone.utc) - last_fetched_timestamp
-            # print(time_since_fetch)
-            # print(wait_time)
-            if time_since_fetch >= wait_time:
-                urls.append(url)
-        schedule_results[level] = len(urls)
-        all_urls.extend(urls)
-    
-    schedule_results_str = ''
-    for level, res in schedule_results.items():
-        schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + ', '
-    logger.info('%s' + 'Total URLs to fetch: %s', schedule_results_str, len(all_urls))
-    con.close()
-    return all_urls
-
-def find_new_news():
-    """ Parses BBC homepage for all news articles and checks if they are new to our system
-        Returns a list of URLs that should be added to our system
-    """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    latest_news_urls = get_news_urls()
-    cursor = con.execute("SELECT url FROM tracking")
-    stored_urls = [row[0] for row in cursor]
-    online_urls_not_in_storage = list(set(latest_news_urls) - set(stored_urls))
-    con.close()
-    return online_urls_not_in_storage
-
-    
-def debug_add_sample_tracking_data():
-    """ Add sample data """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    for level in range(1, 7):
-        for i in range(2):
-            bind = ('https://www.bbc.co.uk/news/articles/test_level_' + str(level) + '____' + str(i), level)
-            con.execute("INSERT INTO tracking VALUES(?, ?)", bind)
-            con.commit()
-    con.close()
-
-
-
-def get_updated_news():
-    """ DEBUG: essentially this does the same as get_latest_news() except it uses the URLs from the
-        database instead of the latest news articles on the news homepage
-        Returns a list of parsed article objects
-        Note: unlike my other functions, the sqlite3.Connection object is not being passed
-              as an argument. This is because the main_loop() connection is using dict_factory
-              which makes returning the URLs as a sequence difficult. Multiple read connections
-              in sqlite are acceptable, but keep an eye on this fuction just in case.
-    """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    cursor = con.execute("SELECT DISTINCT url FROM article")
-    urls = [row[0] for row in cursor]
-    con.close()
-    articles = urls_to_parsed_articles(urls, delay=2)
-    return articles
-
-def get_latest_news():
-    """ Parses the latest news articles from the BBC news homepage
-        Returns a list of parsed article objects
-    """
-    urls = get_news_urls(debug=5)
-    # As get_news_urls() has just been called, there has already been a HTTP request within the
-    # last few milliseconds. It's possible the first request of the throttler will be sent too
-    # close to the homepage scrape request - so we delay to avoid this
-    time.sleep(2)
-    articles = urls_to_parsed_articles(urls, delay=2)
-    return articles
-
-def get_news_urls(debug=None):
-    """ Extracts all the news article URLs from the BBC Homepage
-        Returns a list of URL strings
-        debug = integer; flag to reduce the number returned for testing purposes
-    """
-    news_homepage = 'https://www.bbc.co.uk/news'
-    news_homepage_html = request_html(news_homepage)
-    # In the event of connection issues we don't want to carry on with the function
-    if news_homepage_html is None:
-        return None
-    soup = bs4.BeautifulSoup(request_html(news_homepage), 'lxml')
-    news_urls = []
-    for link in soup.find_all('a'):
-        href = link.get('href')
-        # href attribute exists on the <a> AND contains '/news/articles/'
-        # AND is not the '#comments' version of the link
-        if href is not None and href.find('/news/articles/') != -1 and href.find('comments') == -1:
-            news_urls.append('https://www.bbc.co.uk' + href)
-    # Remove duplicate URLs
-    news_urls = list(set(news_urls))
-    if debug is not None:
-        return news_urls[:debug]
-    return news_urls
-
-def urls_to_parsed_articles(urls, delay):
-    """ Takes a list of URLs and returns a list of Article objects 
-        with raw_html attribute value fetched via the requests_throttler
-        The returned objects should be parsed Article objects ready to store/compare
-        urls = list of strings
-        delay = float; seconds to use for requests throttling
-    """
-    # List of request objects to send to the throttler
-    reqs = []
-    for url in urls:
-        request = requests.Request(method='GET', url=url)
-        reqs.append(request)
-
-    # Create a custom session to pass to requests_throttler to configure global timeout
-    s = requests.Session()
-    s.mount('http://', TimeoutHTTPAdapter(timeout=10))
-    s.mount('https://', TimeoutHTTPAdapter(timeout=10))
-
-    # Throttler queues all the requests and processes them slowly
-    # This step can take a while depending on the delay and number of URLs
-    with BaseThrottler(name='base-throttler', delay=delay, session=s) as bt:
-        throttled_requests = bt.multi_submit(reqs)
-
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
-    con.execute('PRAGMA foreign_keys = ON')
-    res = []
-    
-    for tr in throttled_requests:
-        fetched_timestamp = datetime.now(timezone.utc).isoformat()
-        # First check for any exceptions
-        if tr.exception is not None:
-            logger.error(
-                'Request Error: URL: %s\n' +
-                'Exception __str__:\n%s\n' +
-                'Exception Type:\n%s\n',
-                tr.request.url, tr.exception, type(tr.exception)
-                )
-            status = tr.exception.__class__.__name__
-        # The 3rd party library doesn't raise exception for HTTPError so we check
-        elif tr.response.status_code != 200:
-            logger.error(
-                'Request Error: URL: %s\n' +
-                'HTTP Error - Status Code: %s\n',
-                tr.request.url, tr.response.status_code
-                )
-            status = str(tr.response.status_code)
-        # Anything that gets to here is status code 200
-        else:
-            tr.response.encoding = 'utf-8'
-            article = Article(url=tr.response.url)
-            article.raw_html = tr.response.text
-            # Note: technically not when it is 'fetched' as that happens inside the threading of
-            # requests_throttler, so there could be up to a couple of minutes delay on this time
-            # NOTE: the above may no longer be true!
-            article.fetched_timestamp = fetched_timestamp
-            article.parse_all()
-            res.append(article)
-            status = '200'
-        
-        schedule_level = get_schedule_level(tr.request.url)
-        bind = (tr.request.url, schedule_level, fetched_timestamp, status)
-        con.execute("""
-            INSERT INTO fetch('url', 'schedule_level', 'fetched_timestamp', 'status')
-            VALUES(?, ?, ?, ?)
-            """, bind)
-        con.commit()
-    
-    con.close()
-    return res
-
-def testing_new_fetch_insert():
-    """ Test function """
-    url_list = ['http://www.sdfjldsjfldsjflkadshghafdlgjfdsalkgjladsfjgldsfj.com']
-    articles = urls_to_parsed_articles(url_list, delay=2)
-    # articles[0].debug_log_print()
-
-def isOnline():
+def is_online():
     """ Boolean function that checks whether the internet is connected 
         Checks against https://www.bbc.co.uk
         This covers both if they are down or if my connection is down, as either way
         we will get an exception raised here
     """
     try:
-        response = requests.get('https://www.bbc.co.uk', timeout=10)
+        requests.get('https://www.bbc.co.uk', timeout=10)
         return True
     except requests.exceptions.ConnectionError as e:
         logger.debug(
@@ -949,6 +658,7 @@ def isOnline():
             )
         return False
 
+
 def testing_looping():
     """ Testing running the main_loop() every 15 minutes """
     # interval = 60*15
@@ -956,7 +666,7 @@ def testing_looping():
     while True:
         logger.info('Waking up from sleep...')
         time.sleep(3)
-        if isOnline():
+        if is_online():
             # call main_loop()
             logger.info('Simulating calling main_loop()')
             time.sleep(3)
@@ -964,6 +674,35 @@ def testing_looping():
             logger.error('No internet connection detected, skipping this loop')
         logger.info('Going to sleep for %s seconds...', interval)
         time.sleep(interval)
+
+
+def testing_comparison():
+    """ Proof of concept for showing visual differences in article objects """
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    article_a = table_row_to_article(cursor.fetchone())
+    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
+    article_b = table_row_to_article(cursor.fetchone())
+
+    con.close()
+
+    text1 = article_a.parsed['body'].splitlines()
+    text2 = article_b.parsed['body'].splitlines()
+
+    with open('diff_html/template_top.html', encoding='utf-8') as f:
+        template_start = f.read()
+    with open('diff_html/template_bottom.html', encoding='utf-8') as f:
+        template_end = f.read()
+
+    d = difflib.HtmlDiff(wrapcolumn=75)
+    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
+
+    with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
+        f.write(template_start)
+        f.write(diff_table)
+        f.write(template_end)
 
 
 if __name__ == '__main__':
@@ -991,16 +730,3 @@ if __name__ == '__main__':
 
 
     main_loop()
-    # testing_check_articles()
-    
-    # debug_add_sample_tracking_data()
-
-    # calculate_scheduled_urls()
-
-    # testing_new_fetch_insert()
-
-    # update_schedule_levels()
-
-    # testing_schedule_duration_logic()
-
-    
