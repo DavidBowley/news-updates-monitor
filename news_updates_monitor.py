@@ -729,22 +729,14 @@ if __name__ == '__main__':
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
+    # Checking that the DB can be accessed
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute(
+            """
+            SELECT * FROM tracking LIMIT 1
+            """
+            )
+    print(cursor.fetchone())
     
-    interval = 60*15
-    while True:
-        logger.info('Waking up from sleep...')
-        time.sleep(3)
-        if is_online():
-            main_loop()
-            time.sleep(3)
-        else:
-            logger.error('No internet connection detected, skipping this loop')
-        logger.info('Going to sleep for %s minutes...', int(interval / 60))
-
-        for seconds in range(interval, 0, -1):
-            m, s = divmod(seconds, 60)
-            sys.stdout.write('\t\t\t' + '*'*10 + f' {m:02d}:{s:02d} ' + '*'*10)
-            sys.stdout.flush()
-            sys.stdout.write("\r")
-            time.sleep(1)
 
