@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 import sqlite3
 import difflib
 import typing
+import sys
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -293,7 +294,7 @@ def main_loop():
     # Decide which URLs will be fetched this loop based on their schedule_level
     scheduled_urls = calculate_scheduled_urls()
     # Fetch the URLs and convert to parsed article objects (i.e. article snapshots)
-    articles = urls_to_parsed_articles(urls=scheduled_urls, delay=2)
+    articles = urls_to_parsed_articles(urls=scheduled_urls, delay=5)
     # Process article objects: store new and updated articles in database
     check_articles(articles)
 
@@ -728,5 +729,22 @@ if __name__ == '__main__':
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
+    
+    interval = 60*15
+    while True:
+        logger.info('Waking up from sleep...')
+        time.sleep(3)
+        if is_online():
+            main_loop()
+            time.sleep(3)
+        else:
+            logger.error('No internet connection detected, skipping this loop')
+        logger.info('Going to sleep for %s minutes...', int(interval / 60))
 
-    main_loop()
+        for seconds in range(interval, 0, -1):
+            m, s = divmod(seconds, 60)
+            sys.stdout.write('\t\t\t' + '*'*10 + f' {m:02d}:{s:02d} ' + '*'*10)
+            sys.stdout.flush()
+            sys.stdout.write("\r")
+            time.sleep(1)
+
