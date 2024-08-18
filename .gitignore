@@ -162,10 +162,11 @@ cython_debug/
 #.idea/
 
 # debugging
-test_file.html
-test_file2.html
-debug_table.html
+test_files/
 debug_table/
 
 # diff output
 ansi2html.html
+
+# SQLite DB files
+test_db/
