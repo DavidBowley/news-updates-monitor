@@ -8,6 +8,7 @@
 import pprint # pylint: disable=unused-import
               #         For debugging purposes, should be removed later
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import time
 from datetime import datetime, timezone, timedelta
 import sqlite3
@@ -712,21 +713,29 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    # Create a formatter to define the log format
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    
+    # Create separate INFO and DEBUG file logs - 1 each per day with a 30 day rotating backup
+    file_handler_debug = TimedRotatingFileHandler(
+        'log/debug/debug.log', encoding='utf-8', when='midnight', backupCount=30, utc=True
+        )
+    file_handler_debug.setLevel(logging.DEBUG)
+    file_handler_debug.setFormatter(formatter)
 
-    # Create a file handler to write logs to a file
-    file_handler = logging.FileHandler('debug.log', encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
+    file_handler_info = TimedRotatingFileHandler(
+        'log/info/info.log', encoding='utf-8', when='midnight', backupCount=30, utc=True
+        )
+    file_handler_info.setLevel(logging.INFO)
+    file_handler_info.setFormatter(formatter)
 
-    # Create a stream handler to print logs to the console
+    # Create a stream handler to print logs to the console - only logs INFO
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
     # Add the handlers to the logger
-    logger.addHandler(file_handler)
+    logger.addHandler(file_handler_debug)
+    logger.addHandler(file_handler_info)
     logger.addHandler(console_handler)
 
     
