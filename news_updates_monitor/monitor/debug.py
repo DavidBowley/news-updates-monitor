@@ -7,6 +7,12 @@
 
 """
 
+import sys
+import logging
+
+sys.path.append('..')
+from article import Article, table_row_to_article, dict_factory
+
 def testing_exceptions():
     """ Test function to make sure Timeout, Connection and other exceptions
         are working via requests_throttler
@@ -104,3 +110,28 @@ def indent(spaces):
         spaces = integer
     """
     return ' ' * spaces
+
+def testing_indepth_articles():
+    """ Test function to try and get the InDepth articles to correctly parse the headline """
+    article = debug_file_to_article_object('https://www.bbc.co.uk/news/articles/c4gz8934wrro', 'test_files/indepth_test_isolate.html')
+    article.debug_parse_all()
+    # article.debug_log_print()
+
+
+if __name__ == '__main__':
+
+    # Create a logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    
+    # Create a stream handler to print logs to the console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(formatter)
+
+    # Add the handlers to the logger
+    logger.addHandler(console_handler)
+
+    testing_indepth_articles()
