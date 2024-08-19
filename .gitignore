@@ -173,3 +173,6 @@ test_db/
 
 # logs
 log/
+
+# auto-generated file for testing article diff function
+news_updates_monitor/web_interface/diff_html/diff.html

@@ -27,30 +27,54 @@ def testing_import():
 
 def testing_comparison():
     """ Proof of concept for showing visual differences in article objects """
-    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
-    cursor = con.execute("SELECT * FROM article WHERE article_id=1")
+    cursor = con.execute("SELECT * FROM article WHERE article_id=171")
     article_a = table_row_to_article(cursor.fetchone())
-    cursor = con.execute("SELECT * FROM article WHERE article_id=31")
+    cursor = con.execute("SELECT * FROM article WHERE article_id=328")
     article_b = table_row_to_article(cursor.fetchone())
 
     con.close()
 
+    headline1 = article_a.parsed['headline'].splitlines()
+    headline2 = article_b.parsed['headline'].splitlines()
     text1 = article_a.parsed['body'].splitlines()
     text2 = article_b.parsed['body'].splitlines()
+    byline1 = article_a.parsed['byline'].splitlines()
+    byline2 = article_b.parsed['byline'].splitlines()
+    timestamp1 = article_a.parsed['_timestamp'].splitlines()
+    timestamp2 = article_b.parsed['_timestamp'].splitlines()
+
 
     with open('diff_html/template_top.html', encoding='utf-8') as f:
         template_start = f.read()
     with open('diff_html/template_bottom.html', encoding='utf-8') as f:
         template_end = f.read()
 
-    d = difflib.HtmlDiff(wrapcolumn=75)
-    diff_table = d.make_table(text1, text2, fromdesc='From', todesc='To')
+    d = difflib.HtmlDiff(wrapcolumn=71)
+    diff_table_headline = d.make_table(headline1, headline2, fromdesc='Headline A', todesc='Headline B')
+
+    d = difflib.HtmlDiff(wrapcolumn=71)
+    diff_table_body = d.make_table(text1, text2, fromdesc='Body A', todesc='Body B')
+
+    d = difflib.HtmlDiff(wrapcolumn=71)
+    diff_table_byline = d.make_table(byline1, byline2, fromdesc='Byline A', todesc='Byline B')
+
+    d = difflib.HtmlDiff(wrapcolumn=71)
+    diff_table_timestamp = d.make_table(timestamp1, timestamp2, fromdesc='Timestamp A', todesc='Timestamp B')
+
+    
 
     with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
         f.write(template_start)
-        f.write(diff_table)
+        f.write(diff_table_headline)
+        f.write('\n<br>\n')
+        f.write(diff_table_body)
+        f.write('\n<br>\n')
+        f.write(diff_table_byline)
+        f.write('\n<br>\n')
+        f.write(diff_table_timestamp)
         f.write(template_end)
 
 if __name__ == '__main__':
@@ -85,4 +109,4 @@ if __name__ == '__main__':
     logger.addHandler(console_handler)
 
 
-    testing_import()
+    testing_comparison()
