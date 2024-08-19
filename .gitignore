@@ -170,3 +170,6 @@ ansi2html.html
 
 # SQLite DB files
 test_db/
+
+# logs
+log/
