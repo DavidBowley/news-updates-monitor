@@ -1,0 +1,5 @@
+[telegram_bot]
+enabled = False
+token = token_goes_here
+chat_id = chat_id_goes_here
+

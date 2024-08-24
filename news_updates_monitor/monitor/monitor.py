@@ -14,12 +14,15 @@ from datetime import datetime, timezone, timedelta
 import sqlite3
 import typing
 import sys
+import asyncio
+import configparser
 
 import requests
 from requests.adapters import HTTPAdapter
 import bs4
 # Note: this is my fork of requests_throttler (see requirements.txt)
 from requests_throttler import BaseThrottler
+import telegram
 
 sys.path.append('..')
 from article import Article, table_row_to_article, dict_factory
@@ -346,6 +349,14 @@ def urls_to_parsed_articles(urls, delay):
             """, bind)
         con.commit()
 
+        if status != '200':
+            telegram_str = ('<b>*** Request Error ***</b>\n' +
+                '<b>URL: </b>' + tr.request.url + '\n' +
+                '<b>Fetched Timestamp: </b>' + fetched_timestamp + '\n' +
+                '<b>Status: </b>' + status
+                )
+            asyncio.run(telegram_bot_send_msg(telegram_str))
+
     con.close()
     return res
 
@@ -446,6 +457,31 @@ def is_online():
             )
         return False
 
+async def telegram_bot_send_msg(msg):
+    """ Sends a message using the specified Telegram bot Token and Chat ID from the config.ini file
+        Can be disabled using enabled = False in the config file
+        Note: this is obviousy not the most efficient way to code the function (reading the config
+        file every time for example) however so far in Production it's only been called a handful
+        of times per week, so it's unlikely to be a big overhead
+    """
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    bot_enabled = config.getboolean('telegram_bot', 'enabled')
+    if bot_enabled:
+        token = config['telegram_bot']['token']
+        chat_id = config['telegram_bot']['chat_id']
+        bot = telegram.Bot(token)
+        try:
+            async with bot:
+                await bot.send_message(text=msg, chat_id=chat_id, parse_mode='html')
+        except Exception as e:
+            logger.error(
+                'Telegram Bot error:\n' +
+                'Exception __str__: %s\n' +
+                'Exception Type: %s',
+                e, type(e)
+                )
+
 
 if __name__ == '__main__':
 
@@ -454,7 +490,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-    
+
     # Create separate INFO and DEBUG file logs - 1 each per day with a 30 day rotating backup
     file_handler_debug = TimedRotatingFileHandler(
         'log/debug/debug.log', encoding='utf-8', when='midnight', backupCount=30, utc=True
@@ -478,7 +514,6 @@ if __name__ == '__main__':
     logger.addHandler(file_handler_info)
     logger.addHandler(console_handler)
 
-    
     interval = 60*15
     while True:
         logger.info('Waking up from sleep...')
@@ -496,4 +531,3 @@ if __name__ == '__main__':
             sys.stdout.flush()
             sys.stdout.write("\r")
             time.sleep(1)
-
