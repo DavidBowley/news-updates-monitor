@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>News Updates Monitor: Web Interface</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <header>
+      {% include '_navigation.html' %}
+    </header>
+    <h1>News Updates Monitor Web Interface</h1>
+    <p>This interface allows for a more user-friendly interaction with the data that the News Updates Monitor collects</p>
+    <p>TODO: Below there will be a list of links to the latest articles fetched (likely will have pagination also)</p>
+    <p><a href="{{ url_for('article') }}">Article template page</a>
+  </body>
+</html>

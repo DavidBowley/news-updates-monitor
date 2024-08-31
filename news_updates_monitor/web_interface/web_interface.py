@@ -11,8 +11,14 @@ import sqlite3
 import difflib
 import sys
 
+import jinja2
+from flask import Flask, render_template
+
 sys.path.append('..')
 from article import Article, table_row_to_article, dict_factory
+
+
+app = Flask(__name__)
 
 
 def testing_import():
@@ -52,6 +58,7 @@ def testing_comparison():
     with open('diff_html/template_bottom.html', encoding='utf-8') as f:
         template_end = f.read()
 
+    # TODO: make this some kind of loop as there's no need for all this repetition
     d = difflib.HtmlDiff(wrapcolumn=71)
     diff_table_headline = d.make_table(headline1, headline2, fromdesc='Headline A', todesc='Headline B')
 
@@ -64,8 +71,6 @@ def testing_comparison():
     d = difflib.HtmlDiff(wrapcolumn=71)
     diff_table_timestamp = d.make_table(timestamp1, timestamp2, fromdesc='Timestamp A', todesc='Timestamp B')
 
-    
-
     with open('diff_html/diff.html', 'w', encoding='utf-8') as f:
         f.write(template_start)
         f.write(diff_table_headline)
@@ -76,6 +81,36 @@ def testing_comparison():
         f.write('\n<br>\n')
         f.write(diff_table_timestamp)
         f.write(template_end)
+
+def testing_jinja():
+    """ Test function """
+    environment = jinja2.Environment()
+    template = environment.from_string("Hello, {{name}}!")
+    print(template.render(name='World'))
+
+
+@app.route('/')
+def home():
+    """ Flask homepage """
+    # Contains a list of all unique articles
+    # Basic version will show X per page with a pagination component, latest articles first
+    return render_template('index.html')
+
+@app.route('/article')
+def article():
+    """ Article page - one per unique article URL """
+    # TODO: Create a mapping from version name to article_ID, as IDs can be used as query string
+    #       to send to Compare template
+    #       Will pull in article data based on the url query string
+    return render_template('article.html')
+
+@app.route('/compare')
+def compare():
+    """ Compare page - compares one article version to another version """
+    # Recieves query string with 2 article IDs that can be used for comparison
+    # See prototype function testing_comparison()
+    return render_template('compare.html')
+
 
 if __name__ == '__main__':
 
@@ -108,5 +143,5 @@ if __name__ == '__main__':
     logger.addHandler(file_handler_info)
     logger.addHandler(console_handler)
 
-
-    testing_comparison()
+    app.run(debug=True)
+    
