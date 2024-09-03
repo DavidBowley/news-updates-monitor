@@ -11,6 +11,7 @@ import sqlite3
 import difflib
 import sys
 import math
+import urllib.parse
 
 import jinja2
 from flask import Flask, render_template, request
@@ -155,7 +156,10 @@ def article():
     # TODO: Create a mapping from version name to article_ID, as IDs can be used as query string
     #       to send to Compare template
     #       Will pull in article data based on the url query string
-    return render_template('article.html')
+
+    url = request.args.get('url')
+
+    return render_template('article.html', url=url)
 
 @app.route('/compare')
 def compare():

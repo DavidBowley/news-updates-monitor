@@ -1,0 +1,24 @@
+body {
+    font-family: 'Cabin', Trebuchet, 'Trebuchet MS', sans-serif;
+    padding: 1em;
+}
+
+main {
+    font-size: 130%;
+}
+
+table.url-list {
+    padding-left: 1em;
+}
+
+table.url-list th[scope='row'] a {
+    font-weight: normal;
+}
+
+.center {
+    text-align: center;
+}
+
+.left-align {
+    text-align: left;
+}
