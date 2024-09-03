@@ -132,6 +132,12 @@ def home():
     cursor = con.execute('SELECT url, rowid FROM tracking ORDER BY rowid DESC LIMIT ? OFFSET ?', bind)
     article_urls = cursor.fetchall()
 
+    cursor = con.execute('SELECT COUNT(*) FROM article')
+    total_snapshot, = cursor.fetchone()
+
+    cursor = con.execute('SELECT COUNT(*) FROM fetch')
+    total_fetch, = cursor.fetchone()
+
 
     # TODO: add logic for if the database is empty (i.e the first run)
 
@@ -147,7 +153,9 @@ def home():
         page_next=page_next,
         page_start=page_start,
         page_end=page_end,
-        article_urls=article_urls
+        article_urls=article_urls,
+        total_snapshot=total_snapshot,
+        total_fetch=total_fetch
         )
 
 @app.route('/article')

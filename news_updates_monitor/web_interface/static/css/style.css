@@ -8,11 +8,24 @@ main {
 }
 
 table.url-list {
-    padding-left: 1em;
+    padding-left: 0em;
+}
+
+table.url-list th[scope='row'] {
+    padding: 0.5rem;
 }
 
 table.url-list th[scope='row'] a {
     font-weight: normal;
+}
+
+table.url-list th[scope='col'] {
+    border-bottom: 0.18rem solid black;
+    padding: 0.5rem;
+}
+
+table.url-list  td {
+
 }
 
 .center {
@@ -21,4 +34,27 @@ table.url-list th[scope='row'] a {
 
 .left-align {
     text-align: left;
+}
+
+nav.pagination {
+    padding: 1rem 0rem 1rem 0rem;
+}
+
+.pagination ul {
+    padding-left: 0rem;
+}
+
+.pagination li {
+    display: inline;
+    list-style-type: none;
+    padding-right: 20px;
+}
+
+.pagination li a {
+    color: #000000;
+    font-size: 3rem;
+    font-weight: bold;
+    text-decoration: none;
+    outline: 0.18rem solid black;
+    padding: 0rem 1.5rem 0rem 1.5rem;
 }

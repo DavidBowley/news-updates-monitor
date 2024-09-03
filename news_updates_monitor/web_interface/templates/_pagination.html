@@ -1,0 +1,17 @@
+<nav class="pagination" aria-label="Pagination">
+  <p>Page {{ page }} of {{ total_pages }}, showing articles {{ page_start }} to {{ page_end }}</p>
+  <ul>
+    <li>
+      <a href="{{ url_for('home') }}?page=1" aria-label="First page">&laquo;</a>
+    </li>
+    <li>
+      <a href="{{ url_for('home') }}?page={{ page_prev }}" aria-label="Previous page">&lsaquo;</a>
+    </li>
+    <li>
+      <a href="{{ url_for('home') }}?page={{ page_next }}" aria-label="Next page">&rsaquo;</a>
+    </li>
+    <li>
+      <a href="{{ url_for('home') }}?page={{ total_pages }}" aria-label="Last page">&raquo;</a>
+    </li>
+  </ul>
+</nav>
