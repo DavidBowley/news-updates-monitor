@@ -10,9 +10,10 @@ from logging.handlers import TimedRotatingFileHandler
 import sqlite3
 import difflib
 import sys
+import math
 
 import jinja2
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 sys.path.append('..')
 from article import Article, table_row_to_article, dict_factory
@@ -94,7 +95,59 @@ def home():
     """ Flask homepage """
     # Contains a list of all unique articles
     # Basic version will show X per page with a pagination component, latest articles first
-    return render_template('index.html')
+
+    # Count the number of rows in the Tracking table (unique articles)
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute('SELECT COUNT(*) FROM tracking')
+    total, = cursor.fetchone()
+
+    # hard-coded an arbitrary 100 for now
+    rows_per_page = 100
+    # page requested via the query string
+    page = request.args.get('page')
+    # Validate query string - nothing entered at all defaults to page 1
+    if page and page.isdigit():
+        page = max(int(page), 1)
+    else:
+        page = 1
+    
+    # For handling pagination buttons
+    page_prev, page_next = max(page - 1, 1), page + 1
+    # math.ceil because any remainder left must be on its own page, even if only one row
+    total_pages = int(math.ceil(total / rows_per_page))
+    # Ensure requested page isn't too high, return the highest possible if it is
+    page = max(min(page, total_pages), 1)
+    # How many rows to exclude from the beginning of the query, depending on what page we're on
+    offset = (page - 1) * rows_per_page
+    # Make sure page_next can't exceed the total number of pages
+    page_next = min(page + 1, total_pages)
+    # The row number of the first row on the page
+    page_start = offset + 1
+    # The row number of the last row on the page (may have less than the previous full pages)
+    page_end = min(total, page_start + rows_per_page - 1)
+
+    bind = (rows_per_page, offset)
+    cursor = con.execute('SELECT url, rowid FROM tracking ORDER BY rowid DESC LIMIT ? OFFSET ?', bind)
+    article_urls = cursor.fetchall()
+
+
+    # TODO: add logic for if the database is empty (i.e the first run)
+
+    con.close()
+
+    return render_template(
+        'index.html',
+        total=total,
+        page=page,
+        total_pages=total_pages,
+        offset=offset, # debug only
+        page_prev=page_prev,
+        page_next=page_next,
+        page_start=page_start,
+        page_end=page_end,
+        article_urls=article_urls
+        )
 
 @app.route('/article')
 def article():

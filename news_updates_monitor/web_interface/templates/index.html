@@ -12,8 +12,28 @@
       {% include '_navigation.html' %}
     </header>
     <h1>News Updates Monitor Web Interface</h1>
-    <p>This interface allows for a more user-friendly interaction with the data that the News Updates Monitor collects</p>
-    <p>TODO: Below there will be a list of links to the latest articles fetched (likely will have pagination also)</p>
+    <p><b>Total number of unique articles: </b> {{ total }} </p>
+    <p><i>list of articles links goes here...</i></p>
     <p><a href="{{ url_for('article') }}">Article template page</a>
+    <br>
+
+    <h2>Pagination testing</h2>
+    <ul>
+      <li>Total pages: {{ total_pages }} </li>
+      <li>Requested page: {{ page }} </li>
+      <li>Previous page: {{ page_prev }} </li>
+      <li>Next page: {{ page_next }} </li>
+      <li>page_start: {{ page_start }} </li>
+      <li>page_end: {{ page_end }} </li>
+      <li>Offset: {{ offset }} </li>
+    </ul>
+
+    <h2>Testing article listing</h2>
+    <ul>
+      {% for row in article_urls  %}
+      <li><a href="{{ row[0] }}" target="_blank">{{ row[0] }}</a>, <a href="{{ url_for('article') }}?url={{ row[0] }}">Details</a> , {{ row[1] }} </li>
+      {% endfor %}
+    </ul>
+
   </body>
 </html>
