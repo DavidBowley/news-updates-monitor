@@ -13,9 +13,16 @@
     </header>
     <main>
       <h1>Article page</h1>
-      <p>This template will show the details of the specific article requested, e.g. metadata, fetch times, etc.</p>
-      <p><b>URL: </b>{{ url }}</p>
-      <h2>Testing the routing...</h2>
+      <h2>Most Recent Data</h2>
+      <ul>
+        <li><b>URL: </b><a href="{{ latest_article.url }}">{{ latest_article.url }}</a></li>
+        <li><b>Headline: </b> {{ latest_article.parsed['headline'] }} </li>
+        <li><b>Byline: </b> {{ latest_article.parsed['byline'] }} </li>
+        <li><b>Timestamp: </b>{{ latest_article.parsed['_timestamp'] }} </li>
+        <li><b>Snapshots: </b>{{ snapshots }} </li>
+        <li><b>Fetches: </b>{{ fetches }} </li>
+      </ul>
+      <h2>Compare Versions</h2>
       <p>Example link to one of the comparison pages:</p>
       <p><a href="{{ url_for('compare') }}">Compare original version to version 2</a></p>
     </main>

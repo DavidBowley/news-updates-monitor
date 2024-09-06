@@ -164,10 +164,38 @@ def article():
     # TODO: Create a mapping from version name to article_ID, as IDs can be used as query string
     #       to send to Compare template
     #       Will pull in article data based on the url query string
-
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
     url = request.args.get('url')
 
-    return render_template('article.html', url=url)
+    cursor = con.execute(
+            'SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1', (url,)
+            )
+    row = cursor.fetchone()
+    latest_article = table_row_to_article(row)
+    con.close()
+
+    # Open a new connection without dict_factory
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute(
+            'SELECT COUNT(*) FROM article WHERE url = ?', (url,)
+            )
+    snapshots, = cursor.fetchone()
+    cursor = con.execute(
+            'SELECT COUNT(*) FROM fetch WHERE url = ?', (url,)
+            )
+    fetches, = cursor.fetchone()
+
+    con.close()
+
+    return render_template(
+        'article.html',
+        latest_article=latest_article,
+        snapshots=snapshots,
+        fetches=fetches
+        )
 
 @app.route('/compare')
 def compare():
