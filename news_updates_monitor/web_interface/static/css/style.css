@@ -58,3 +58,27 @@ nav.pagination {
     outline: 0.18rem solid black;
     padding: 0rem 1.5rem 0rem 1.5rem;
 }
+
+/* Diff_HTML <table> styling */
+table.diff {
+    font-family:Courier;
+    border:medium;
+    margin-bottom: 1rem;
+}
+.diff_header {background-color:#e0e0e0}
+td.diff_header {text-align:right}
+.diff_next {background-color:#c0c0c0}
+.diff_add {background-color:#aaffaa}
+.diff_chg {background-color:#ffff77}
+.diff_sub {background-color:#ffaaaa}
+td[id], td[id] + td {padding-top: 20px;}
+td[nowrap] {padding-left: 20px;
+            padding-right: 20px;}
+
+body.diff_html {
+    padding-left: 0;
+}
+
+body.diff_html main {
+    font-size: 100%;
+}

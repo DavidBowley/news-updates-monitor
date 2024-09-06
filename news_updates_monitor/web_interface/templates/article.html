@@ -24,7 +24,7 @@
       <h2>Compare Versions</h2>
       <ul>
         {% for id_pair in compare_ids %}
-        <li><a href="{{ url_for('compare') }}?id_a={{ id_pair[1] }}&id_b={{ id_pair[2] }}">Compare version {{ id_pair[0][0] }} with version {{ id_pair[0][1] }}</a></li>
+        <li><a href="{{ url_for('compare') }}?id_a={{ id_pair[1] }}&id_b={{ id_pair[2] }}&version_a={{ id_pair[0][0] }}&version_b={{ id_pair[0][1] }}&url={{ latest_article.url | urlencode }}">Compare version {{ id_pair[0][0] }} with version {{ id_pair[0][1] }}</a></li>
         {% endfor %}
       </ul>
     </main>

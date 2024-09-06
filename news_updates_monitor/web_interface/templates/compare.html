@@ -4,19 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Compare verion X to X</title>
+    <title>Comparing article IDs {{ id_a }} and {{ id_b }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   </head>
-  <body>
+  <body class="diff_html">
     <header>
       {% include '_navigation.html' %}
     </header>
     <main>
-      <h1>Compare page</h1>
-      <ul>
-        <li>id_a is {{ id_a }}</li>
-        <li>id_b is {{ id_b }}</li>
-      </ul>
+      <h1>Comparing versions {{ version_a }} and {{ version_b }} for URL: <a href="{{ url }}">{{ url }}</a></h1>
+      {% for table in diff_tables %}
+      {{ table | safe }}
+      {% endfor %}
     </main>
     </body>
 </html>

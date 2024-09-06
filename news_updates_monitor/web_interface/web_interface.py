@@ -39,9 +39,9 @@ def testing_comparison():
     con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
-    cursor = con.execute("SELECT * FROM article WHERE article_id=171")
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1604")
     article_a = table_row_to_article(cursor.fetchone())
-    cursor = con.execute("SELECT * FROM article WHERE article_id=328")
+    cursor = con.execute("SELECT * FROM article WHERE article_id=1693")
     article_b = table_row_to_article(cursor.fetchone())
 
     con.close()
@@ -162,9 +162,6 @@ def home():
 @app.route('/article')
 def article():
     """ Article page - one per unique article URL """
-    # TODO: Create a mapping from version name to article_ID, as IDs can be used as query string
-    #       to send to Compare template
-    #       Will pull in article data based on the url query string
     con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
     con.execute('PRAGMA foreign_keys = ON')
     con.row_factory = dict_factory
@@ -215,14 +212,57 @@ def article():
 
 @app.route('/compare')
 def compare():
-    """ Compare page - compares one article version to another version """
-    # Recieves query string with 2 article IDs that can be used for comparison
-    # See prototype function testing_comparison()
+    """ Compare page - compares one article version to another version
+        Recieves query string with 2 article IDs that can be used for comparison
+    """
     id_a = request.args.get('id_a')
     id_b = request.args.get('id_b')
+    version_a = request.args.get('version_a')
+    version_b = request.args.get('version_b')
+    url = request.args.get('url')
 
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    con.row_factory = dict_factory
+    cursor = con.execute("SELECT * FROM article WHERE article_id=?", (id_a,))
+    article_a = table_row_to_article(cursor.fetchone())
+    cursor = con.execute("SELECT * FROM article WHERE article_id=?", (id_b,))
+    article_b = table_row_to_article(cursor.fetchone())
+    con.close()
 
-    return render_template('compare.html', id_a=id_a, id_b=id_b)
+    parsed_parts = list(article_a.parsed.keys())
+    parsed_parts.remove('parse_errors')
+    diff_tables = []
+
+    for part in parsed_parts:
+        snapshot_a = article_a.parsed[part]
+        if snapshot_a is not None:
+            snapshot_a = snapshot_a.splitlines()
+        else:
+            snapshot_a = ['']
+        snapshot_b = article_b.parsed[part]
+        if snapshot_b is not None:
+            snapshot_b = snapshot_b.splitlines()
+        else:
+            snapshot_b = ['']
+        d = difflib.HtmlDiff(wrapcolumn=71)
+        diff_table = d.make_table(
+            snapshot_a,
+            snapshot_b,
+            fromdesc=f'{part.strip('_').title()} Version {version_a}',
+            todesc=f'{part.strip('_').title()} Version {version_b}'
+            )
+        diff_tables.append(diff_table)
+
+    return render_template(
+        'compare.html',
+        id_a=id_a,
+        id_b=id_b,
+        version_a=version_a,
+        version_b=version_b,
+        url=url,
+        diff_tables=diff_tables,
+        )
 
 
 if __name__ == '__main__':
