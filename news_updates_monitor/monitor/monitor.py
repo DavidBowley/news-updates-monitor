@@ -5,8 +5,6 @@
 
 """
 
-import pprint # pylint: disable=unused-import
-              #         For debugging purposes, should be removed later
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import time
@@ -155,10 +153,6 @@ def update_schedule_levels():
                 WHERE url = ?
                 """, bind)
             counter += 1
-        logger.debug(
-            '%s \tcurrent_schedule_level: %s\tnew_schedule_level %s',
-            url, current_schedule_level, new_schedule_level
-            )
     con.commit()
     con.close()
     logger.info('%s schedule_levels updated out of a total %s URLs checked', counter, len(rows))
