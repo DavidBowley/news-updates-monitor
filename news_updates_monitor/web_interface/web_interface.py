@@ -12,6 +12,7 @@ import difflib
 import sys
 import math
 import urllib.parse
+import pprint
 
 import jinja2
 from flask import Flask, render_template, request
@@ -187,6 +188,19 @@ def article():
             'SELECT COUNT(*) FROM fetch WHERE url = ?', (url,)
             )
     fetches, = cursor.fetchone()
+    cursor = con.execute(
+            'SELECT article_id FROM article WHERE url = ?', (url,)
+            )
+    article_ids = []
+    for row in cursor:
+        article_ids += row
+
+    # Tuple giving version info and article_ids for different comparision versions
+    # Format: ( (version_a, version_b), id_a, id_b )
+    compare_ids = []
+    for i in range(len(article_ids) - 1):
+        versions = (i + 1, i + 2)
+        compare_ids.append((versions, article_ids[i], article_ids[i+1]))
 
     con.close()
 
@@ -194,7 +208,9 @@ def article():
         'article.html',
         latest_article=latest_article,
         snapshots=snapshots,
-        fetches=fetches
+        fetches=fetches,
+        article_ids=article_ids,
+        compare_ids=compare_ids
         )
 
 @app.route('/compare')
@@ -202,7 +218,11 @@ def compare():
     """ Compare page - compares one article version to another version """
     # Recieves query string with 2 article IDs that can be used for comparison
     # See prototype function testing_comparison()
-    return render_template('compare.html')
+    id_a = request.args.get('id_a')
+    id_b = request.args.get('id_b')
+
+
+    return render_template('compare.html', id_a=id_a, id_b=id_b)
 
 
 if __name__ == '__main__':
