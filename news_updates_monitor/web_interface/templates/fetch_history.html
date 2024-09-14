@@ -22,7 +22,7 @@
           <th>Schedule Level</th>
         </tr>
         {% for fetch in fetches %}
-        <tr>
+        <tr {% if fetch[1] != '200' %} class="error"{% endif %}>
           {% for col in fetch %}
           <td>{{ col }}</td>
           {% endfor %}

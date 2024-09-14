@@ -88,6 +88,11 @@ table.fetch-history {
     padding-left: 0em;
 }
 
+table.fetch-history tr.error {
+    background-color: #EB0000;
+    color: #FFFFFF;
+}
+
 table.fetch-history th {
     border-bottom: 0.18rem solid black;
     padding: 0.5rem;
