@@ -22,7 +22,11 @@ import bs4
 from requests_throttler import BaseThrottler
 import telegram
 
+# Disabling Pylint here as it's a false positive from the system path hack
+# pylint: disable-next=wrong-import-position
 sys.path.append('..')
+# Disabling Pylint as it cannot detect the system path hacked local module
+# pylint: disable-next=import-error
 from article import Article, table_row_to_article, dict_factory
 
 
@@ -62,6 +66,8 @@ def request_html(url):
         response.encoding = 'utf-8'
         return response.text
     except requests.exceptions.RequestException as e:
+        # Disabling Pylint: this is standard usage of logger as global variable
+        # pylint: disable-next=possibly-used-before-assignment
         logger.error(
             'Request Error: URL: %s\n' +
             'Exception __str__:\n%s\n' +
@@ -290,13 +296,13 @@ def urls_to_parsed_articles(urls, delay):
         reqs.append(request)
 
     # Create a custom session to pass to requests_throttler to configure global timeout
-    s = requests.Session()
-    s.mount('http://', TimeoutHTTPAdapter(timeout=10))
-    s.mount('https://', TimeoutHTTPAdapter(timeout=10))
+    session = requests.Session()
+    session.mount('http://', TimeoutHTTPAdapter(timeout=10))
+    session.mount('https://', TimeoutHTTPAdapter(timeout=10))
 
     # Throttler queues all the requests and processes them slowly
     # This step can take a while depending on the delay and number of URLs
-    with BaseThrottler(name='base-throttler', delay=delay, session=s) as bt:
+    with BaseThrottler(name='base-throttler', delay=delay, session=session) as bt:
         throttled_requests = bt.multi_submit(reqs)
 
     con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
@@ -468,7 +474,7 @@ async def telegram_bot_send_msg(msg):
         try:
             async with bot:
                 await bot.send_message(text=msg, chat_id=chat_id, parse_mode='html')
-        except Exception as e:
+        except telegram.error.TelegramError as e:
             logger.error(
                 'Telegram Bot error:\n' +
                 'Exception __str__: %s\n' +
@@ -508,6 +514,8 @@ if __name__ == '__main__':
     logger.addHandler(file_handler_info)
     logger.addHandler(console_handler)
 
+    # Disabling Pylint - this is not a module level constant
+    # pylint: disable-next=invalid-name
     interval = 60*15
     while True:
         logger.info('Waking up from sleep...')
