@@ -82,3 +82,18 @@ body.diff_html {
 body.diff_html main {
     font-size: 100%;
 }
+
+
+table.fetch-history {
+    padding-left: 0em;
+}
+
+table.fetch-history th {
+    border-bottom: 0.18rem solid black;
+    padding: 0.5rem;
+}
+
+table.fetch-history td {
+    padding: 0.5rem 2rem 0.5rem 2rem;
+    text-align: center;
+}

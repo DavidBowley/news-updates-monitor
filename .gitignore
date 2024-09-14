@@ -164,6 +164,7 @@ cython_debug/
 # debugging
 test_files/
 debug_table/
+scratch.py
 
 # diff output
 ansi2html.html

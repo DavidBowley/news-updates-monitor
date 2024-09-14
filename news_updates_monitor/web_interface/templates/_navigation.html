@@ -1,6 +1,6 @@
 <nav>
     <a href="{{ url_for('home') }}">Home</a>
-    {% if request.path == url_for('compare') %}
+    {% if request.path == url_for('compare') or request.path == url_for('fetch_history')  %}
      | <a href="{{ url_for('article') }}?url={{ url | urlencode }}">Back to main article page</a>
     {% endif %}
 </nav>

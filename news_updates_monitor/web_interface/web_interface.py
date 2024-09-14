@@ -11,7 +11,7 @@ import sqlite3
 import difflib
 import sys
 import math
-import urllib.parse
+from datetime import datetime, timezone
 import pprint
 
 import jinja2
@@ -90,6 +90,11 @@ def testing_jinja():
     environment = jinja2.Environment()
     template = environment.from_string("Hello, {{name}}!")
     print(template.render(name='World'))
+
+
+def convert_datetime(val):
+    """ Sqlite3 Converter function - ISO 8601 datetime to datetime.datetime object."""
+    return datetime.fromisoformat(val.decode())
 
 
 @app.route('/')
@@ -270,6 +275,30 @@ def compare():
         diff_tables=diff_tables,
         )
 
+@app.route('/fetch_history')
+def fetch_history():
+    """ Shows all the fetch timestamps for the given article URL """
+    url = request.args.get('url')
+    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3', detect_types=sqlite3.PARSE_COLNAMES)
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute(
+            'SELECT fetched_timestamp as "fetched_timestamp [datetime]", status, schedule_level FROM fetch WHERE url = ?', (url,)
+            )
+    fetches = cursor.fetchall()
+
+    # Format the timestamp string
+    fetches_strftime = []
+    for fetch in fetches:
+        new_fetch = []
+        for col in fetch:
+            if isinstance(col, datetime):
+                col = col.strftime('%d %b %Y, %H:%M:%S')
+            new_fetch.append(col)
+        fetches_strftime.append(tuple(new_fetch))
+    fetches = fetches_strftime
+
+    return render_template('fetch_history.html', url=url, fetches=fetches)
+
 
 if __name__ == '__main__':
 
@@ -301,6 +330,8 @@ if __name__ == '__main__':
     logger.addHandler(file_handler_debug)
     logger.addHandler(file_handler_info)
     logger.addHandler(console_handler)
+
+    sqlite3.register_converter("datetime", convert_datetime)
 
     app.run(debug=True)
     

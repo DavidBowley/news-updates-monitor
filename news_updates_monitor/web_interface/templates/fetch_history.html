@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Fetch History for {{ url }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  </head>
+  <body>
+    <header>
+      {% include '_navigation.html' %}
+    </header>
+    <main>
+      <h1>Fetch History</h1>
+      <p>Note: Schedule Level refers to the level recorded at the time of the fetch.</p>
+      <p>Note 2: Timezone is set at the scraping source (usually UTC).</p>
+      <table class="fetch-history">
+        <tr>
+          <th>Timestamp</th>
+          <th>Status</th>
+          <th>Schedule Level</th>
+        </tr>
+        {% for fetch in fetches %}
+        <tr>
+          {% for col in fetch %}
+          <td>{{ col }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+    </main>
+  </body>
+</html>
