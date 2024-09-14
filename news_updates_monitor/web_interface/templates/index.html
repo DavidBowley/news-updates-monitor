@@ -22,6 +22,7 @@
       <table class="url-list">
         <tr>
           <th scope="col">URL</th>
+          <th scope="col">Snapshots</th>
           <th scope="col">Details</th>
         </tr>
         {% for row in article_urls  %}
@@ -29,6 +30,7 @@
           <th scope="row" class="left-align">
             <a href="{{ row[0] }}" target="_blank">{{ row[0] }}</a>
           </th>
+          <td class="center">{{ row[1] }}</td>
           <td class="center">
             <a href="{{ url_for('article') }}?url={{ row[0] | urlencode }}" aria-label="Details">&rarr;</a>
           </td>

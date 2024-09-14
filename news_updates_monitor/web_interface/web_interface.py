@@ -135,7 +135,18 @@ def home():
     page_end = min(total, page_start + rows_per_page - 1)
 
     bind = (rows_per_page, offset)
-    cursor = con.execute('SELECT url, rowid FROM tracking ORDER BY rowid DESC LIMIT ? OFFSET ?', bind)
+    # All tracking table URLs as well as the number of article snapshots per URL
+    cursor = con.execute(
+        """
+        SELECT tracking.url, COUNT(*)
+        FROM tracking JOIN article ON (article.url = tracking.url)
+        GROUP BY tracking.url
+        ORDER BY tracking.rowid DESC
+        LIMIT ?
+        OFFSET ?
+        """
+        , bind
+        )
     article_urls = cursor.fetchall()
 
     cursor = con.execute('SELECT COUNT(*) FROM article')
