@@ -11,14 +11,16 @@ import sqlite3
 import difflib
 import sys
 import math
-from datetime import datetime, timezone
-import pprint
+from datetime import datetime
 
-import jinja2
 from flask import Flask, render_template, request
 
+# Disabling Pylint here as it's a false positive from the system path hack
+# pylint: disable-next=wrong-import-position
 sys.path.append('..')
-from article import Article, table_row_to_article, dict_factory
+# Disabling Pylint as it cannot detect the system path hacked local module
+# pylint: disable-next=import-error
+from article import table_row_to_article, dict_factory
 
 
 app = Flask(__name__)
@@ -50,7 +52,7 @@ def home():
         page = max(int(page), 1)
     else:
         page = 1
-    
+
     # For handling pagination buttons
     page_prev, page_next = max(page - 1, 1), page + 1
     # math.ceil because any remainder left must be on its own page, even if only one row
@@ -173,6 +175,8 @@ def compare():
     """ Compare page - compares one article version to another version
         Recieves query string with 2 article IDs that can be used for comparison
     """
+    # pylint: disable=too-many-locals
+    #         16/15 is good enough
     id_a = request.args.get('id_a')
     id_b = request.args.get('id_b')
     version_a = request.args.get('version_a')
@@ -226,10 +230,16 @@ def compare():
 def fetch_history():
     """ Shows all the fetch timestamps for the given article URL """
     url = request.args.get('url')
-    con = sqlite3.connect('../monitor/test_db/news_updates_monitor.sqlite3', detect_types=sqlite3.PARSE_COLNAMES)
+    con = sqlite3.connect(
+        '../monitor/test_db/news_updates_monitor.sqlite3', detect_types=sqlite3.PARSE_COLNAMES
+        )
     con.execute('PRAGMA foreign_keys = ON')
     cursor = con.execute(
-            'SELECT fetched_timestamp as "fetched_timestamp [datetime]", status, schedule_level FROM fetch WHERE url = ?', (url,)
+            """
+            SELECT fetched_timestamp as "fetched_timestamp [datetime]", status, schedule_level
+            FROM fetch
+            WHERE url = ?
+            """, (url,)
             )
     fetches = cursor.fetchall()
 
@@ -254,7 +264,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-    
+
     # Create separate INFO and DEBUG file logs - 1 each per day with a 30 day rotating backup
     file_handler_debug = TimedRotatingFileHandler(
         'log/debug/debug.log', encoding='utf-8', when='midnight', backupCount=30, utc=True
@@ -281,4 +291,3 @@ if __name__ == '__main__':
     sqlite3.register_converter("datetime", convert_datetime)
 
     app.run(debug=True)
-    
