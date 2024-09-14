@@ -12,7 +12,9 @@
       {% include '_navigation.html' %}
     </header>
     <main>
+      {% if latest_article is defined %}
       <h1>Details for URL: <a href="{{ latest_article.url }}">{{ latest_article.url }}</a></h1>
+      
       <h2>Most Recent Data</h2>
       <ul>
         <li><b>Headline: </b> {{ latest_article.parsed['headline'] }} </li>
@@ -28,6 +30,9 @@
         <li><a href="{{ url_for('compare') }}?id_a={{ id_pair[1] }}&id_b={{ id_pair[2] }}&version_a={{ id_pair[0][0] }}&version_b={{ id_pair[0][1] }}&url={{ latest_article.url | urlencode }}">Compare version {{ id_pair[0][0] }} with version {{ id_pair[0][1] }}</a></li>
         {% endfor %}
       </ul>
+      {% else %}
+      <p>There is no information stored in the database for the requested article URL.</p>
+      {% endif %}
     </main>
   </body>
 </html>

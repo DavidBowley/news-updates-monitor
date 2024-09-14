@@ -176,6 +176,10 @@ def article():
             'SELECT * FROM article WHERE url = ? ORDER BY article_id DESC LIMIT 1', (url,)
             )
     row = cursor.fetchone()
+
+    if row is None:
+        return render_template('article.html')
+
     latest_article = table_row_to_article(row)
     con.close()
 
