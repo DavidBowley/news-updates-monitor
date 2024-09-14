@@ -199,6 +199,11 @@ def article():
         versions = (i + 1, i + 2)
         compare_ids.append((versions, article_ids[i], article_ids[i+1]))
 
+    cursor = con.execute(
+            'SELECT schedule_level FROM tracking WHERE url = ?', (url,)
+            )
+    schedule_level, = cursor.fetchone()
+
     con.close()
 
     return render_template(
@@ -206,6 +211,7 @@ def article():
         latest_article=latest_article,
         snapshots=snapshots,
         fetches=fetches,
+        schedule_level=schedule_level,
         article_ids=article_ids,
         compare_ids=compare_ids
         )
