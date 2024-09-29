@@ -290,4 +290,4 @@ if __name__ == '__main__':
 
     sqlite3.register_converter("datetime", convert_datetime)
 
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
