@@ -105,6 +105,12 @@ def update_schedule_levels():
         previous level's timeframe - the next level starts 1 second after the previous timeframe.
         The first fetched_timestamp on record per URL is the baseline to work out its age.
         Level 6's can be ignored because there's no higher level to move them to.
+
+        NEW Level 0 = these have been manually removed from the scheduling directly via updating
+        the database (likely due to downtime causing massive backlogs of fetches if the fetched
+        timestamps were relied on like the rest of the levels). The system should not attempt to
+        manually update these levels based on their timestamps, so that we can keep them in the
+        database without having the system clog up trying to catch up with the old fetches.
     """
     schedule_level_duration = {
     1: timedelta(hours=3),
