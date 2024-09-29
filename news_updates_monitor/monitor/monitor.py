@@ -523,19 +523,35 @@ if __name__ == '__main__':
     # Disabling Pylint - this is not a module level constant
     # pylint: disable-next=invalid-name
     interval = 60*15
-    while True:
-        logger.info('Waking up from sleep...')
-        time.sleep(3)
-        if is_online():
-            main_loop()
+    try:
+        while True:
+            logger.info('Waking up from sleep...')
             time.sleep(3)
-        else:
-            logger.error('No internet connection detected, skipping this loop')
-        logger.info('Going to sleep for %s minutes...', int(interval / 60))
+            if is_online():
+                main_loop()
+                time.sleep(3)
+            else:
+                logger.error('No internet connection detected, skipping this loop')
+            logger.info('Going to sleep for %s minutes...', int(interval / 60))
 
-        for seconds in range(interval, 0, -1):
-            m, s = divmod(seconds, 60)
-            sys.stdout.write('\t\t\t' + '*'*10 + f' {m:02d}:{s:02d} ' + '*'*10)
-            sys.stdout.flush()
-            sys.stdout.write("\r")
-            time.sleep(1)
+            for seconds in range(interval, 0, -1):
+                m, s = divmod(seconds, 60)
+                sys.stdout.write('\t\t\t' + '*'*10 + f' {m:02d}:{s:02d} ' + '*'*10)
+                sys.stdout.flush()
+                sys.stdout.write("\r")
+                time.sleep(1)
+    except Exception as e:
+        # These exceptions should cause the program to end - I'd like to know about these when they
+        # happen so I don't end up having the system down for long periods of time
+        logger.critical(
+            'Critical failure - app will now exit\n' +
+            'Exception __str__:\n%s\n' +
+            'Exception Type:\n%s\n',
+            e, type(e)
+            )
+        asyncio.run(telegram_bot_send_msg(
+            '<b>*** Fatal Error Detected ***</b>\n' +
+            'App is shutting down...\n' + 
+            'Please check the logs for more details of the exception.'
+            ))
+        sys.exit()
