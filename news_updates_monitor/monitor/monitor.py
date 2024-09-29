@@ -202,7 +202,7 @@ def get_news_urls(debug=None):
     # In the event of connection issues we don't want to carry on with the function
     if news_homepage_html is None:
         return None
-    soup = bs4.BeautifulSoup(request_html(news_homepage), 'lxml')
+    soup = bs4.BeautifulSoup(news_homepage_html, 'lxml')
     news_urls = []
     for link in soup.find_all('a'):
         href = link.get('href')
