@@ -283,6 +283,8 @@ def calculate_scheduled_urls():
         schedule_results_str += 'Level ' + str(level) +'s: ' + str(res) + ', '
     logger.info('%s' + 'Total URLs to fetch: %s', schedule_results_str, len(all_urls))
     con.close()
+    # Wait so I can actually read how many it's going to attempt before the console gets filled
+    time.sleep(5)
     return all_urls
 
 def urls_to_parsed_articles(urls, delay):
