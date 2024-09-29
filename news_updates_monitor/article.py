@@ -171,9 +171,9 @@ class Article():
             Is now used to store both brand new articles and updates to existing articles
             con = sqlite3.Connection object (currenlty open DB connection from main_loop() )
         """
-        # Remvoing the soup before pickling as it can lead to maximum recursion depth errors
-        # Can be re-souped from raw_html if needed
         self.soup = None
+        # Remove next line for debugging raw_html if required
+        self.raw_html = None
         row_dict = self.to_row_dict()
         # Format columns string for SQL query
         columns = ', '.join(row_dict.keys())
