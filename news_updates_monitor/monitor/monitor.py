@@ -21,6 +21,7 @@ import bs4
 # Note: this is my fork of requests_throttler (see requirements.txt)
 from requests_throttler import BaseThrottler
 import telegram
+import schedule
 
 # Disabling Pylint here as it's a false positive from the system path hack
 # pylint: disable-next=wrong-import-position
@@ -81,6 +82,8 @@ def main_loop():
         database for updates. Uses a scheduling system so that articles are only checked at certain
         times depending on how old they are.        
     """
+    # Runs any tasks scheduled by the Schedule module (weekly report for now)
+    schedule.run_pending()
     # Update Tracking table to make sure all schedule_levels are up to date
     update_schedule_levels()
     # Find new news articles that we haven't yet seen and add them to the Tracking table
@@ -91,6 +94,23 @@ def main_loop():
     articles = urls_to_parsed_articles(urls=scheduled_urls, delay=5)
     # Process article objects: store new and updated articles in database
     check_articles(articles)
+
+def weekly_report():
+    con = sqlite3.connect('test_db/news_updates_monitor.sqlite3')
+    con.execute('PRAGMA foreign_keys = ON')
+    cursor = con.execute('SELECT COUNT(*) FROM tracking')
+    total, = cursor.fetchone()
+    cursor = con.execute('SELECT COUNT(*) FROM article')
+    total_snapshot, = cursor.fetchone()
+    cursor = con.execute('SELECT COUNT(*) FROM fetch')
+    total_fetch, = cursor.fetchone()
+    telegram_str = ('<b>*** Weekly Report ***</b>\n' +
+                'Total unique articles: <b>{:,}</b>\n'.format(total) +
+                'Total article snapshots: <b>{:,}</b>\n'.format(total_snapshot) +
+                'Total article fetches: <b>{:,}</b>'.format(total_fetch)
+                )
+    asyncio.run(telegram_bot_send_msg(telegram_str))
+    logger.info('Weekly report sent!')
 
 def update_schedule_levels():
     """ Checks all existing articles from the Tracking table to make sure that their tracking 
@@ -526,6 +546,7 @@ if __name__ == '__main__':
     # pylint: disable-next=invalid-name
     interval = 60*15
     try:
+        schedule.every().saturday.at("10:00").do(weekly_report)
         while True:
             logger.info('Waking up from sleep...')
             time.sleep(3)
