@@ -44,3 +44,22 @@ The script should be run 24/7. I used an old Raspberry Pi but any old Linux serv
 
 ## Proxies?
 Surprisingly no. It runs every 15-20 minutes, but only ever makes one request per 5 second period. Despite racking up a few GB on the same IP I've not had the need for proxies yet.
+
+## Screenshots
+
+### Homepage
+
+![Screenshot of the homepage showing a table of BBC News article URLs along with their number of article snapshots recorded. The pagination shows there are 26 pages of 100 articles per page.](/screenshots/home_full.png)
+
+
+### Article Details
+
+![Screenshot of the Article Details page showing the most recent data avaialble for the example article, such as headline, byline, timestamp, number of snapshots, number of fetches, and its current schedule level. It also shows links to the pages where adjacent versions of the same article can be compared.](/screenshots/article.png)
+
+### Fetch History
+
+![Screenshot of the Fetch History page showing all the fetches (HTTP requests) for a particular article, the HTTP status code returned, and the schedule level recorded at the time of the fetch.](/screenshots/fetch_history2.png)
+
+### Article Comparison
+
+![Screenshot of the Article Comparison page showing an example of the Python difflib comparison, which uses color-coding to highlight specific changes made between the versions.](/screenshots/article_comparison.png)
